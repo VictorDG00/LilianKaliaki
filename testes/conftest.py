@@ -43,22 +43,6 @@ async def clean_db():
         await db.commit()
 
 
-@pytest_asyncio.fixture(autouse=True)
-def mock_mercadopago_preference(monkeypatch):
-    class _FakePreference:
-        def create(self, data):
-            return {"response": {"id": "fake-preference-id"}}
-
-    class _FakeSDK:
-        def __init__(self, access_token):
-            pass
-
-        def preference(self):
-            return _FakePreference()
-
-    monkeypatch.setattr("app.routes_public.mercadopago.SDK", _FakeSDK)
-
-
 @pytest_asyncio.fixture
 async def client():
     transport = ASGITransport(app=app)

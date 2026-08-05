@@ -28,17 +28,6 @@ templates = Jinja2Templates(directory="templates")
 RESERVA_ATIVA = (StatusReserva.PENDENTE, StatusReserva.CONFIRMADA)
 
 
-def _criar_preferencia_mp(titulo: str, preco: float, external_reference: str) -> str:
-    sdk = mercadopago.SDK(settings.MERCADO_PAGO_ACCESS_TOKEN)
-    resp = sdk.preference().create(
-        {
-            "items": [{"title": titulo, "quantity": 1, "unit_price": preco}],
-            "external_reference": external_reference,
-        }
-    )
-    return resp["response"]["id"]
-
-
 async def _upsert_contato(
     session: AsyncSession, nome: str, email: str, telefone: str, consentimento_marketing: bool
 ) -> Contato:
@@ -215,13 +204,13 @@ async def reservar(
 
     await session.refresh(reserva)
 
-    preference_id = _criar_preferencia_mp(servico.titulo, servico.preco, f"reserva:{reserva.id}")
-
     return templates.TemplateResponse(
         request,
         "partials/checkout.html",
         {
-            "preference_id": preference_id,
+            "amount": servico.preco,
+            "external_reference": f"reserva:{reserva.id}",
+            "email": email,
             "public_key": settings.MERCADO_PAGO_PUBLIC_KEY,
             "titulo": "Reserva criada",
             "mensagem": "Finalize o pagamento para confirmar seu horário (a reserva expira em 15 minutos).",
@@ -253,15 +242,33 @@ async def comprar(
     await session.commit()
     await session.refresh(pedido)
 
-    preference_id = _criar_preferencia_mp(produto.titulo, produto.preco, f"pedido:{pedido.id}")
-
     return templates.TemplateResponse(
         request,
         "partials/checkout.html",
         {
-            "preference_id": preference_id,
+            "amount": produto.preco,
+            "external_reference": f"pedido:{pedido.id}",
+            "email": email,
             "public_key": settings.MERCADO_PAGO_PUBLIC_KEY,
             "titulo": "Pedido criado",
             "mensagem": "Finalize o pagamento para confirmar sua compra.",
         },
     )
+
+
+@router.post("/pagar")
+async def pagar(request: Request):
+    payload = await request.json()
+    external_reference = payload.pop("external_reference", None)
+    if not external_reference:
+        return {"status": "rejected"}
+
+    sdk = mercadopago.SDK(settings.MERCADO_PAGO_ACCESS_TOKEN)
+    payload["external_reference"] = external_reference
+    try:
+        resp = sdk.payment().create(payload)
+        status = resp.get("response", {}).get("status", "rejected")
+    except Exception:
+        status = "rejected"
+
+    return {"status": status}
