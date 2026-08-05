@@ -8,7 +8,6 @@
       mp.bricks().create("payment", "checkout-brick", {
         initialization: {
           amount: {{ amount }},
-          payer: { email: "{{ email }}" },
         },
         callbacks: {
           onReady: () => {},

@@ -210,7 +210,6 @@ async def reservar(
         {
             "amount": servico.preco,
             "external_reference": f"reserva:{reserva.id}",
-            "email": email,
             "public_key": settings.MERCADO_PAGO_PUBLIC_KEY,
             "titulo": "Reserva criada",
             "mensagem": "Finalize o pagamento para confirmar seu horário (a reserva expira em 15 minutos).",
@@ -248,7 +247,6 @@ async def comprar(
         {
             "amount": produto.preco,
             "external_reference": f"pedido:{pedido.id}",
-            "email": email,
             "public_key": settings.MERCADO_PAGO_PUBLIC_KEY,
             "titulo": "Pedido criado",
             "mensagem": "Finalize o pagamento para confirmar sua compra.",
