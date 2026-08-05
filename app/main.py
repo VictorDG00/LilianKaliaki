@@ -6,7 +6,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqladmin import Admin
+from starlette.middleware.sessions import SessionMiddleware
 from app.admin import setup_admin
+from app.config import settings
 from app.database import engine
 from app.tasks import expirar_reservas_loop
 
@@ -22,6 +24,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 admin = setup_admin(app, engine)
 
 app.mount("/static", StaticFiles(directory="templates/static"), name="static")

@@ -3,6 +3,7 @@ uvicorn[standard]
 sqlmodel
 asyncpg
 sqladmin
+itsdangerous
 jinja2
 python-multipart
 pydantic-settings
