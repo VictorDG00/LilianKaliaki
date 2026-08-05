@@ -265,6 +265,8 @@ async def pagar(request: Request):
 
     sdk = mercadopago.SDK(settings.MERCADO_PAGO_ACCESS_TOKEN)
     payload["external_reference"] = external_reference
+    payload_log = {**payload, "token": "***"} if "token" in payload else payload
+    logger.info("Enviando pagamento para o MP: %s", payload_log)
     try:
         resp = sdk.payment().create(payload)
         corpo = resp.get("response", {})
