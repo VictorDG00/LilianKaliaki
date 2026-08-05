@@ -1,11 +1,11 @@
 <div class="checkout-box">
   <h3>{{ titulo }}</h3>
   <p>{{ mensagem }}</p>
-  <div id="checkout-brick"></div>
+  <div id="checkout-brick-{{ external_reference | replace(':', '-') }}"></div>
   <script>
     (function () {
       const mp = new MercadoPago("{{ public_key }}");
-      mp.bricks().create("payment", "checkout-brick", {
+      mp.bricks().create("payment", "checkout-brick-{{ external_reference | replace(':', '-') }}", {
         initialization: {
           amount: {{ amount }},
         },
