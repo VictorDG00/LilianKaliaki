@@ -1,1 +1,13 @@
 <p class="erro">{{ mensagem }}</p>
+{% if voltar_servico_id and voltar_data_str %}
+<button
+  type="button"
+  class="drawer-voltar"
+  hx-get="/agendar/passo-horarios"
+  hx-vals='{"servico_id": {{ voltar_servico_id }}, "data_str": "{{ voltar_data_str }}"}'
+  hx-target="#drawer-content"
+  hx-swap="innerHTML"
+>
+  ← Escolher outro horário
+</button>
+{% endif %}

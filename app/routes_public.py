@@ -65,8 +65,20 @@ async def index(request: Request, session: AsyncSession = Depends(get_session)):
     )
 
 
-@router.get("/horarios-livres")
-async def horarios_livres(
+@router.get("/agendar/passo-data")
+async def agendar_passo_data(
+    request: Request, servico_id: int, session: AsyncSession = Depends(get_session)
+):
+    servico = await session.get(Servico, servico_id)
+    if servico is None or not servico.ativo:
+        return templates.TemplateResponse(
+            request, "partials/erro.html", {"mensagem": "Serviço indisponível."}, status_code=400
+        )
+    return templates.TemplateResponse(request, "partials/drawer_data.html", {"servico": servico})
+
+
+@router.get("/agendar/passo-horarios")
+async def agendar_passo_horarios(
     request: Request,
     servico_id: int,
     data_str: str,
@@ -118,6 +130,23 @@ async def horarios_livres(
     )
 
 
+@router.get("/agendar/passo-form")
+async def agendar_passo_form(
+    request: Request,
+    servico_id: int,
+    data_hora: datetime,
+    session: AsyncSession = Depends(get_session),
+):
+    servico = await session.get(Servico, servico_id)
+    if servico is None or not servico.ativo:
+        return templates.TemplateResponse(
+            request, "partials/erro.html", {"mensagem": "Serviço indisponível."}, status_code=400
+        )
+    return templates.TemplateResponse(
+        request, "partials/drawer_form.html", {"servico": servico, "data_hora": data_hora}
+    )
+
+
 @router.post("/reservar")
 async def reservar(
     request: Request,
@@ -153,7 +182,11 @@ async def reservar(
         return templates.TemplateResponse(
             request,
             "partials/erro.html",
-            {"mensagem": "Esse horário acabou de ser reservado. Escolha outro."},
+            {
+                "mensagem": "Esse horário acabou de ser reservado. Escolha outro.",
+                "voltar_servico_id": servico_id,
+                "voltar_data_str": data_hora.date().isoformat(),
+            },
             status_code=409,
         )
 
@@ -172,7 +205,11 @@ async def reservar(
         return templates.TemplateResponse(
             request,
             "partials/erro.html",
-            {"mensagem": "Esse horário acabou de ser reservado. Escolha outro."},
+            {
+                "mensagem": "Esse horário acabou de ser reservado. Escolha outro.",
+                "voltar_servico_id": servico_id,
+                "voltar_data_str": data_hora.date().isoformat(),
+            },
             status_code=409,
         )
 
@@ -188,6 +225,7 @@ async def reservar(
             "public_key": settings.MERCADO_PAGO_PUBLIC_KEY,
             "titulo": "Reserva criada",
             "mensagem": "Finalize o pagamento para confirmar seu horário (a reserva expira em 15 minutos).",
+            "servico_id": servico_id,
         },
     )
 

@@ -1,0 +1,17 @@
+<div class="drawer-step-header">
+  <h3>{{ servico.titulo }}</h3>
+  <p class="preco">R$ {{ "%.2f"|format(servico.preco) }} · {{ servico.duracao_min }} min</p>
+</div>
+<label>
+  Escolha uma data
+  <input
+    type="date"
+    name="data_str"
+    required
+    hx-get="/agendar/passo-horarios"
+    hx-vals='{"servico_id": {{ servico.id }}}'
+    hx-target="#drawer-content"
+    hx-swap="innerHTML"
+    hx-trigger="change"
+  >
+</label>

@@ -1,26 +1,35 @@
-<h3>Horários livres em {{ data_str }}</h3>
+<button
+  type="button"
+  class="drawer-voltar"
+  hx-get="/agendar/passo-data"
+  hx-vals='{"servico_id": {{ servico.id }}}'
+  hx-target="#drawer-content"
+  hx-swap="innerHTML"
+>
+  ← Escolher outro dia
+</button>
+
+<div class="drawer-step-header">
+  <h3>{{ servico.titulo }}</h3>
+  <p class="preco">{{ data_str }}</p>
+</div>
+
 {% if slots %}
-<ul class="horarios-lista">
+<div class="horarios-grid">
   {% for slot in slots %}
-  <li>
-    <details>
-      <summary>{{ slot.strftime("%H:%M") }}</summary>
-      <form hx-post="/reservar" hx-target="#horarios" hx-swap="innerHTML">
-        <input type="hidden" name="servico_id" value="{{ servico.id }}">
-        <input type="hidden" name="data_hora" value="{{ slot.isoformat() }}">
-        <label>Nome <input type="text" name="nome" required></label>
-        <label>Email <input type="email" name="email" required></label>
-        <label>Telefone <input type="tel" name="telefone" required></label>
-        <label class="checkbox">
-          <input type="checkbox" name="consentimento_marketing" value="true">
-          Aceito receber novidades por email
-        </label>
-        <button class="btn" type="submit">Reservar</button>
-      </form>
-    </details>
-  </li>
+  <button
+    type="button"
+    hx-get="/agendar/passo-form"
+    hx-vals='{"servico_id": {{ servico.id }}, "data_hora": "{{ slot.isoformat() }}"}'
+    hx-target="#drawer-content"
+    hx-swap="innerHTML"
+  >
+    {{ slot.strftime("%H:%M") }}
+  </button>
   {% endfor %}
-</ul>
+</div>
 {% else %}
 <p class="vazio">Nenhum horário disponível nessa data.</p>
 {% endif %}
+
+<p class="selecao" id="servico-selecao-{{ servico.id }}" hx-swap-oob="true">📅 {{ data_str }}</p>

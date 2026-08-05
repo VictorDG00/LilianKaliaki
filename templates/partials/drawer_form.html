@@ -1,0 +1,30 @@
+<button
+  type="button"
+  class="drawer-voltar"
+  hx-get="/agendar/passo-data"
+  hx-vals='{"servico_id": {{ servico.id }}}'
+  hx-target="#drawer-content"
+  hx-swap="innerHTML"
+>
+  ← Escolher outro dia
+</button>
+
+<div class="drawer-step-header">
+  <h3>{{ servico.titulo }}</h3>
+  <p class="preco">{{ data_hora.strftime("%d/%m/%Y às %H:%M") }}</p>
+</div>
+
+<form hx-post="/reservar" hx-target="#drawer-content" hx-swap="innerHTML">
+  <input type="hidden" name="servico_id" value="{{ servico.id }}">
+  <input type="hidden" name="data_hora" value="{{ data_hora.isoformat() }}">
+  <label>Nome <input type="text" name="nome" required></label>
+  <label>Email <input type="email" name="email" required></label>
+  <label>Telefone <input type="tel" name="telefone" required></label>
+  <label class="checkbox">
+    <input type="checkbox" name="consentimento_marketing" value="true">
+    Aceito receber novidades por email
+  </label>
+  <button class="btn" type="submit">Confirmar reserva</button>
+</form>
+
+<p class="selecao" id="servico-selecao-{{ servico.id }}" hx-swap-oob="true">📅 {{ data_hora.strftime("%d/%m %H:%M") }}</p>

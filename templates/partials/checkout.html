@@ -14,4 +14,8 @@
       },
     });
   </script>
+  <button type="button" class="btn btn-outline" onclick="fecharDrawer()">Fechar</button>
 </div>
+{% if servico_id %}
+<p class="selecao" id="servico-selecao-{{ servico_id }}" hx-swap-oob="true">✓ Reservado</p>
+{% endif %}

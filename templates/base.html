@@ -28,5 +28,21 @@
   <footer class="site-footer">
     <p>&copy; Lilian Kaliaki</p>
   </footer>
+
+  <div id="drawer-root">
+    <div class="drawer-overlay" onclick="fecharDrawer()"></div>
+    <aside class="drawer">
+      <button type="button" class="drawer-close" onclick="fecharDrawer()">&times;</button>
+      <div id="drawer-content"></div>
+    </aside>
+  </div>
+  <script>
+    function abrirDrawer() {
+      document.getElementById('drawer-root').classList.add('open');
+    }
+    function fecharDrawer() {
+      document.getElementById('drawer-root').classList.remove('open');
+    }
+  </script>
 </body>
 </html>

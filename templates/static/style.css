@@ -128,7 +128,8 @@ a {
   min-height: 2.5rem;
 }
 
-.card .preco {
+.card .preco,
+.drawer-step-header .preco {
   font-weight: 600;
   color: var(--primary);
   margin-bottom: 0.75rem;
@@ -147,7 +148,8 @@ a {
   margin-top: 0.5rem;
 }
 
-.card label {
+.card label,
+#drawer-content label {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -155,7 +157,8 @@ a {
   color: var(--muted);
 }
 
-.card label.checkbox {
+.card label.checkbox,
+#drawer-content label.checkbox {
   flex-direction: row;
   align-items: center;
   gap: 0.5rem;
@@ -202,38 +205,15 @@ input[type="tel"] {
   display: none;
 }
 
-#horarios,
 #checkout-produtos {
   margin-top: 1.5rem;
 }
 
-.horarios-lista {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-
-.horarios-lista > li {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
-}
-
-.horarios-lista summary {
-  cursor: pointer;
-  font-weight: 600;
+.selecao {
   color: var(--primary);
-}
-
-.horarios-lista form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.6rem;
-  min-width: 220px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  min-height: 1.2em;
 }
 
 .checkout-box {
@@ -262,4 +242,101 @@ input[type="tel"] {
   color: var(--muted);
   font-size: 0.85rem;
   padding: 2rem 0;
+}
+
+#drawer-root {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+#drawer-root .drawer-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(43, 33, 28, 0.45);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+#drawer-root .drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(400px, 90vw);
+  background: var(--surface);
+  box-shadow: -8px 0 24px rgba(43, 33, 28, 0.18);
+  padding: 2rem 1.5rem;
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+}
+
+#drawer-root.open {
+  pointer-events: auto;
+}
+
+#drawer-root.open .drawer-overlay {
+  opacity: 1;
+}
+
+#drawer-root.open .drawer {
+  transform: translateX(0);
+}
+
+.drawer-close {
+  position: absolute;
+  top: 1rem;
+  right: 1.25rem;
+  background: none;
+  border: none;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.drawer-voltar {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 1.25rem;
+}
+
+.drawer-step-header {
+  margin-bottom: 1.25rem;
+}
+
+#drawer-content form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.horarios-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 0.5rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.horarios-grid button {
+  padding: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.horarios-grid button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
 }

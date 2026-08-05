@@ -16,20 +16,23 @@
       <h3>{{ servico.titulo }}</h3>
       <p class="descricao">{{ servico.descricao }}</p>
       <p class="preco">R$ {{ "%.2f"|format(servico.preco) }} <span class="duracao">· {{ servico.duracao_min }} min</span></p>
-      <form hx-get="/horarios-livres" hx-target="#horarios" hx-swap="innerHTML">
-        <input type="hidden" name="servico_id" value="{{ servico.id }}">
-        <label>
-          Escolha uma data
-          <input type="date" name="data_str" required>
-        </label>
-        <button class="btn" type="submit">Ver horários</button>
-      </form>
+      <p class="selecao" id="servico-selecao-{{ servico.id }}"></p>
+      <button
+        type="button"
+        class="btn"
+        onclick="abrirDrawer()"
+        hx-get="/agendar/passo-data"
+        hx-vals='{"servico_id": {{ servico.id }}}'
+        hx-target="#drawer-content"
+        hx-swap="innerHTML"
+      >
+        Escolher horário
+      </button>
     </div>
     {% else %}
     <p class="vazio">Nenhum serviço disponível no momento.</p>
     {% endfor %}
   </div>
-  <div id="horarios"></div>
 </section>
 
 <section id="produtos" class="section">
