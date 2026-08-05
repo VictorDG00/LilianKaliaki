@@ -1,0 +1,1 @@
+# Endpoint para Webhook do Mercado Pago (com verificação)

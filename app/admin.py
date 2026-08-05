@@ -1,0 +1,1 @@
+# Telas de gestão do SQLAdmin (CRM, Reservas, Serviços)

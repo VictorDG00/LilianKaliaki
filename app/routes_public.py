@@ -1,0 +1,1 @@
+# Endpoints HTMX para a página pública e reservas

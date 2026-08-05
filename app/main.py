@@ -1,0 +1,1 @@
+# Entrypoint do FastAPI + Mount do Admin
