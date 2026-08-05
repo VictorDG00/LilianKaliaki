@@ -54,3 +54,17 @@ Se a IA precisar criar uma tela nova: Use Jinja2 + HTMX e adicione o model no SQ
 Se a IA sugerir uma biblioteca nova: Ela deve verificar se a funcionalidade já não é resolvida por FastAPI, HTMX ou SQLModel nativos.
 
 Se o código ficar complexo: Pare, simplifique e reduza para a solução com menos linhas de código possível.
+
+6. Estado Atual & Notas Operacionais (atualizado 2026-08-05)
+
+Divisão de trabalho antiga (Claude só editava `.md`, Copilot escrevia código) foi **revogada** pelo usuário — Claude agora implementa código diretamente neste projeto.
+
+Todas as seções da `sprint_0.3.md` (1-9) estão implementadas: models, migrations, config/sessão async, rotas públicas HTMX, webhook Mercado Pago, loop de expiração, testes, templates.
+
+Pontos que exigem atenção humana antes de operar em produção:
+- `SessionLocal` em `app/database.py` usa `sqlmodel.ext.asyncio.session.AsyncSession` (não a `AsyncSession` pura do SQLAlchemy) — é o que dá o método `.exec()` usado em todas as rotas.
+- `MERCADO_PAGO_PUBLIC_KEY` foi adicionada ao `Settings`/`.env`/`.env.exemple` — obrigatória para o Checkout Bricks no browser (`MERCADO_PAGO_ACCESS_TOKEN` continua sendo só server-side).
+- Rota do webhook é `POST /webhook/mercadopago` — precisa bater com o que for cadastrado no painel do Mercado Pago.
+- O snippet de inicialização do Checkout Bricks em `templates/partials/checkout.html` é melhor esforço — validar contra a doc oficial da MP quando houver conta de sandbox real configurada.
+- Upsert de `Contato` por e-mail não tem trava de concorrência dedicada (só `Reserva` tem o índice único parcial) — dois `POST /reservar` simultâneos com e-mail novo idêntico podem, em teoria, criar 2 `Contato`s. Não é um caso coberto pelos testes prioritários da spec; ficou registrado como limitação conhecida, não como bug.
+- Testes (`testes/`) exigem o `db_test` (porta 5433) no ar — `docker compose -f Infra/docker-compose.yml up -d` — e mockam a API do Mercado Pago (chamada externa, não banco, por isso não entra na regra "sem mocks" que é especificamente sobre Postgres/`SELECT FOR UPDATE`). Rodar com `pytest` na raiz.

@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     MERCADO_PAGO_ACCESS_TOKEN: str
     MERCADO_PAGO_WEBHOOK_SECRET: str
+    MERCADO_PAGO_PUBLIC_KEY: str
 
     class Config:
         env_file = ".env"

@@ -38,7 +38,7 @@ pytest-asyncio
 httpx
 ```
 
-## 2. [ ] Modelo de Dados
+## 2. [x] Modelo de Dados
 
 ### Entidades
 
@@ -61,7 +61,7 @@ WHERE status IN ('pendente', 'confirmada');
 
 Índice parcial não tem suporte na API declarativa do SQLModel — ele é criado via **migration do Alembic** (seção 3), não via `SQLModel.metadata.create_all` e não como SQL solto no código da app.
 
-## 3. [ ] Migrations com Alembic
+## 3. [x] Migrations com Alembic
 
 Todo o versionamento de schema é feito com Alembic (padrão do ecossistema SQLAlchemy/SQLModel), não com `create_all` direto em produção.
 
@@ -145,12 +145,12 @@ op.create_index(
 
 Fluxo do dia a dia: qualquer mudança em `app/models.py` → `alembic revision --autogenerate -m "descrição"` → revisar o arquivo gerado (autogenerate erra às vezes, principalmente em índices/constraints especiais) → `alembic upgrade head`. Isso vale tanto pro banco de dev quanto pro `db_test` usado nos testes.
 
-## 4. [ ] Config & Sessão Async
+## 4. [x] Config & Sessão Async
 
 - `Settings` via `pydantic-settings` (`BaseSettings`), lendo do `.env`.
 - Sessão async criada com `async_sessionmaker` (API do SQLAlchemy 2.0).
 
-## 5. [ ] Rotas Públicas (HTMX) — fluxo em 3 passos
+## 5. [x] Rotas Públicas (HTMX) — fluxo em 3 passos
 
 1. `GET /` — lista serviços ativos.
 2. `GET /horarios-livres?servico_id&data_str` — retorna partial HTML com horários livres do dia (filtra reservas `pendente`/`confirmada` já ocupando o slot).
@@ -158,7 +158,7 @@ Fluxo do dia a dia: qualquer mudança em `app/models.py` → `alembic revision -
 
 Concorrência: usar `SELECT ... FOR UPDATE` dentro da transação ao checar o slot, **e** confiar no índice único parcial do banco como última linha de defesa. Se dois requests passarem pela checagem simultaneamente, o índice único rejeita o segundo `INSERT` (`IntegrityError`), que deve ser capturado e traduzido para uma mensagem de erro amigável no partial de erro.
 
-## 6. [ ] Webhook Mercado Pago — validação de assinatura
+## 6. [x] Webhook Mercado Pago — validação de assinatura
 
 Todo request no endpoint de webhook precisa ser validado antes de processar qualquer payload:
 
@@ -171,7 +171,7 @@ Todo request no endpoint de webhook precisa ser validado antes de processar qual
 
 (Conferir a doc oficial atual da Mercado Pago para exatidão de formatação do manifest — a estrutura acima é a geral.)
 
-## 7. [ ] Expiração de Reservas Pendentes
+## 7. [x] Expiração de Reservas Pendentes
 
 Mecanismo: loop `asyncio` em background, iniciado no startup do FastAPI (sem Celery/cron externo):
 
@@ -185,7 +185,7 @@ async def expirar_reservas_loop():
 asyncio.create_task(expirar_reservas_loop())
 ```
 
-## 8. [ ] Estratégia de Testes
+## 8. [x] Estratégia de Testes
 
 - `pytest` + `pytest-asyncio` + `httpx.AsyncClient` (via `ASGITransport`) contra o Postgres real do `db_test` (não mocks, não SQLite — a trava de concorrência usa `SELECT FOR UPDATE`, que SQLite não implementa de fato).
 - Antes de rodar os testes, aplicar as migrations no `db_test` (`alembic upgrade head` apontando para a `DATABASE_URL` de teste).
@@ -196,7 +196,7 @@ asyncio.create_task(expirar_reservas_loop())
   - Expiração automática: reserva `PENDENTE` com `expira_em` no passado vira `EXPIRADA` após o loop rodar.
   - CRM: mesmo e-mail em duas reservas não duplica `Contato` (upsert por e-mail).
 
-## 9. [ ] Templates
+## 9. [x] Templates
 
 - `base.html`: layout base com bloco `content`.
 - `index.html`: lista de serviços + input de data (`hx-get="/horarios-livres"`).

@@ -24,7 +24,7 @@ class Contato(SQLModel, table=True):
     nome: str
     email: str = Field(index=True)
     telefone: str
-    consentiment_markegin: bool = Field(default=False)
+    consentimento_marketing: bool = Field(default=False)
     criado_em: datetime = Field(default_factory=datetime.utcnow)
 
 class StatusReserva(str, Enum):
@@ -40,5 +40,5 @@ class Reserva(SQLModel, table=True):
     data_hora: datetime = Field(index=True)
     status: StatusReserva = Field(default=StatusReserva.PENDENTE)
     expira_em: datetime
-    mp_payment_id: Optional[str]
+    mp_payment_id: Optional[str] = None
     criado_em: datetime = Field(default_factory=datetime.utcnow)

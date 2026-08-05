@@ -1,0 +1,28 @@
+<div id="horarios">
+  <h3>Horários livres em {{ data_str }}</h3>
+  {% if slots %}
+  <ul class="horarios-lista">
+    {% for slot in slots %}
+    <li>
+      <details>
+        <summary>{{ slot.strftime("%H:%M") }}</summary>
+        <form hx-post="/reservar" hx-target="#horarios" hx-swap="outerHTML">
+          <input type="hidden" name="servico_id" value="{{ servico.id }}">
+          <input type="hidden" name="data_hora" value="{{ slot.isoformat() }}">
+          <label>Nome <input type="text" name="nome" required></label>
+          <label>Email <input type="email" name="email" required></label>
+          <label>Telefone <input type="tel" name="telefone" required></label>
+          <label>
+            <input type="checkbox" name="consentimento_marketing" value="true">
+            Aceito receber novidades por email
+          </label>
+          <button class="btn" type="submit">Reservar</button>
+        </form>
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>Nenhum horário disponível nessa data.</p>
+  {% endif %}
+</div>

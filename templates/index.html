@@ -1,1 +1,29 @@
-# Página inicial blog,loja,agendamento
+{% extends "base.html" %}
+
+{% block title %}Agendar horário{% endblock %}
+
+{% block content %}
+<h1>Serviços disponíveis</h1>
+
+<div class="servicos">
+  {% for servico in servicos %}
+  <div class="card">
+    <h2>{{ servico.titulo }}</h2>
+    <p>{{ servico.descricao }}</p>
+    <p><strong>R$ {{ "%.2f"|format(servico.preco) }}</strong> — {{ servico.duracao_min }} min</p>
+    <form hx-get="/horarios-livres" hx-target="#horarios" hx-swap="innerHTML">
+      <input type="hidden" name="servico_id" value="{{ servico.id }}">
+      <label>
+        Escolha uma data:
+        <input type="date" name="data_str" required>
+      </label>
+      <button class="btn" type="submit">Ver horários</button>
+    </form>
+  </div>
+  {% else %}
+  <p>Nenhum serviço disponível no momento.</p>
+  {% endfor %}
+</div>
+
+<div id="horarios"></div>
+{% endblock %}

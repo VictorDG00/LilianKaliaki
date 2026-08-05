@@ -1,0 +1,17 @@
+<div id="horarios">
+  <h3>Reserva criada</h3>
+  <p>Finalize o pagamento para confirmar seu horário (a reserva expira em 15 minutos).</p>
+  <div id="checkout-brick"></div>
+  <script src="https://sdk.mercadopago.com/js/v2"></script>
+  <script>
+    const mp = new MercadoPago("{{ public_key }}");
+    mp.bricks().create("payment", "checkout-brick", {
+      initialization: {
+        preferenceId: "{{ preference_id }}",
+      },
+      callbacks: {
+        onError: (error) => console.error(error),
+      },
+    });
+  </script>
+</div>

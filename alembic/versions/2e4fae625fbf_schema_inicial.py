@@ -27,7 +27,7 @@ def upgrade() -> None:
     sa.Column('nome', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('email', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('telefone', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('consentiment_markegin', sa.Boolean(), nullable=False),
+    sa.Column('consentimento_marketing', sa.Boolean(), nullable=False),
     sa.Column('criado_em', sa.DateTime(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
