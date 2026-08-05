@@ -9,6 +9,12 @@
         initialization: {
           amount: {{ amount }},
         },
+        customization: {
+          paymentMethods: {
+            creditCard: "all",
+            debitCard: "all",
+          },
+        },
         callbacks: {
           onReady: () => {},
           onError: (error) => console.error(error),
