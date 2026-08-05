@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     MERCADO_PAGO_PUBLIC_KEY: str
     ADMIN_USERNAME: str
     ADMIN_PASSWORD: str
+    DB_PASSWORD: str
+    APP_PORT: str
 
     class Config:
         env_file = ".env"

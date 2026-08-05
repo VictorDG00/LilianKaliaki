@@ -1,43 +1,144 @@
-# Step-by-step — database.py, admin.py, main.py
+# Deploy na VPS (produção, isolado dos outros projetos)
 
-> Fecha a etapa 4 (sessão async) e monta o esqueleto que a etapa 5 (rotas públicas) vai usar. Código é escrito pelo Copilot inline; isto é só o roteiro.
+O repo já vem pronto pra rodar containerizado: `Infra/Dockerfile` +
+`Infra/docker-compose.prod.yml` sobem a app e o Postgres em containers
+próprios, numa rede interna própria (`liliankaliaki`), sem expor o banco ao
+host e sem tocar em nada dos outros projetos que já estão na VPS. O que
+falta é só o que só você pode decidir/fazer na própria VPS — segue abaixo.
 
-## 1. `app/database.py` — feito ✅
+Todos os comandos abaixo rodam **a partir da raiz do repo** (não de dentro de
+`Infra/`) e sempre com `--env-file .env` — o arquivo de compose fica em
+`Infra/` mas o `.env` de segredos fica na raiz, e por padrão o Docker Compose
+só procura `.env` na pasta onde está o arquivo de compose. Se preferir não
+digitar o `--env-file .env` toda hora, dá pra fixar isso na sessão do shell:
 
-- Módulo, sem classe: importa `settings` de `app.config` e cria `engine` e `SessionLocal` **uma vez**, no nível do módulo (não dentro de função — senão recria a pool a cada request).
-- `engine = create_async_engine(settings.DATABASE_URL, echo=True)` — lib `sqlalchemy.ext.asyncio`.
-- `SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)` — API SQLAlchemy 2.0 (a spec pede especificamente `async_sessionmaker`, não o `sessionmaker(class_=AsyncSession)` antigo).
-- `async def get_session()`: generator que faz `async with SessionLocal() as session: yield session` — é a função que as rotas vão usar como `Depends(get_session)`.
-- Não criar tabelas aqui (`create_all`) — schema só via Alembic.
+```bash
+alias dc='docker compose --env-file .env -f Infra/docker-compose.prod.yml'
+```
 
-## 2. `app/admin.py`
+(daí os comandos viram só `dc up -d --build`, `dc ps`, etc. — opcional, os
+exemplos abaixo usam a forma completa para não depender do alias).
 
-Objetivo: registrar os 4 models no SQLAdmin. Zero painel customizado (guardrail seção 1/5) — o SQLAdmin já resolve list/create/edit/delete sozinho, você só descreve o que mostrar.
+## 1. Pré-requisitos na VPS
 
-- **Imports**: `from sqladmin import Admin, ModelView` (já está no arquivo) + `from app.models import Servico, Disponibilidade, Contato, Reserva`.
+Só precisa de Docker + Docker Compose plugin instalados:
 
-- **Classe `ServicoAdmin(ModelView, model=Servico)`**: define `column_list` com os campos que fazem sentido na tabela (`titulo`, `duracao_min`, `preco`, `ativo`). Não precisa de método nenhum, é só atributos de classe — o SQLAdmin lê essas classes por reflexão.
+```bash
+docker --version
+docker compose version
+```
 
-- **Classe `DisponibilidadeAdmin(ModelView, model=Disponibilidade)`**: `column_list` com `dia_semana`, `hora_inicio`, `hora_fim`.
+Se não tiver, instalar Docker Engine (docs oficiais do Docker) antes de continuar.
 
-- **Classe `ContatoAdmin(ModelView, model=Contato)`**: `column_list` com `nome`, `email`, `telefone`, `consentimento_marketing`, `criado_em`.
+## 2. Copiar o repo e criar o `.env` de produção
 
-- **Classe `ReservaAdmin(ModelView, model=Reserva)`**: `column_list` com `servico_id`, `contato_id`, `data_hora`, `status`, `expira_em` — é a tela mais importante pra operação do dia a dia (ver reservas pendentes/confirmadas).
+```bash
+git clone <url-do-repo> liliankaliaki
+cd liliankaliaki
+cp .env.exemple .env
+```
 
-- **Função `setup_admin(app, engine) -> Admin`**: instancia `admin = Admin(app, engine)`, chama `admin.add_view(...)` uma vez pra cada uma das 4 classes acima, e retorna `admin`. Essa função é chamada de dentro de `main.py` — o `admin.py` não monta nada sozinho, só define e expõe.
+**Não copie o `.env` de dev/Codespace para a VPS.** Edite o `.env` novo com
+valores reais de produção:
 
-## 3. `app/main.py`
+- `DATABASE_URL` — pode deixar como está no exemplo (`localhost`), o
+  `docker-compose.prod.yml` sobrescreve isso automaticamente para apontar
+  pro container `db`.
+- `SECRET_KEY` — gere uma nova (não reaproveite a de dev):
+  `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
+- `MERCADO_PAGO_ACCESS_TOKEN` / `MERCADO_PAGO_PUBLIC_KEY` — as credenciais de
+  **produção** do Mercado Pago (as `TEST-...` são só para sandbox).
+- `MERCADO_PAGO_WEBHOOK_SECRET` — vem do passo 5 abaixo, pode deixar
+  placeholder por enquanto.
+- `ADMIN_USERNAME` / `ADMIN_PASSWORD` — credenciais reais do `/admin`, senha forte.
+- `DB_PASSWORD` — senha forte só para o Postgres de produção (variável nova,
+  usada pelo `docker-compose.yml`).
+- `APP_PORT=9765` — porta escolhida para não colidir com os outros projetos
+  da VPS (já é o padrão do compose, só precisa bater se você quiser mudar).
 
-Objetivo: entrypoint FastAPI que junta tudo (engine, admin, templates, routers).
+## 3. Subir a stack
 
-- **Instância `app = FastAPI()`** — no topo do módulo.
-- **Reusar a engine de `database.py`**: `from app.database import engine` — não chamar `create_async_engine` de novo aqui, senão você tem duas pools concorrentes pro mesmo banco.
-- **Chamar `setup_admin(app, engine)`** importado de `app.admin` — uma linha, monta o painel inteiro em `/admin`.
-- **Montar arquivos estáticos**: `app.mount("/static", StaticFiles(directory="static"), name="static")` — lib `fastapi.staticfiles`, pasta `static/` da seção 9 da spec.
-- **Instanciar `Jinja2Templates(directory="templates")`** — pode ficar em `main.py` e ser importado por `routes_public.py`, ou instanciar direto lá; só não duplicar a instância.
-- **Registrar os routers**: `app.include_router(routes_public.router)` e `app.include_router(routes_webhook.router)` — importados de `app.routes_public` e `app.routes_webhook`. Os dois arquivos ainda são stubs vazios (vão ganhar `router = APIRouter()` e os endpoints nas etapas 5 e 6).
-- **Não** adicionar ainda o loop de expiração (`asyncio.create_task(expirar_reservas_loop())`) — isso é etapa 7, só entra no `lifespan` quando a função `expirar_reservas_loop` existir.
+```bash
+docker compose --env-file .env -f Infra/docker-compose.prod.yml up -d --build
+docker compose -f Infra/docker-compose.prod.yml ps
+docker compose -f Infra/docker-compose.prod.yml logs -f app
+```
 
-## Ordem sugerida
+Espera-se ver no log o `alembic upgrade head` rodando sem erro e depois o
+uvicorn subindo (`Uvicorn running on http://0.0.0.0:8000`). `docker compose ps`
+deve mostrar `db` como `healthy` e `app` como `running`.
 
-`admin.py` → `main.py` (agora que `database.py` já está pronto). Depois disso, a etapa 5 (rotas públicas) já tem `get_session`, `engine` e templates disponíveis pra usar.
+Teste local na própria VPS (antes de configurar o proxy):
+
+```bash
+curl -i http://127.0.0.1:9765/
+```
+
+## 4. Configurar o reverse proxy existente
+
+A app só escuta em `127.0.0.1:9765` — não é exposta à internet diretamente,
+só o reverse proxy que já roda os outros projetos da VPS enxerga essa porta.
+Exemplo de bloco nginx (adaptar para o seu domínio e para o padrão de TLS que
+os outros projetos já usam, ex: certbot):
+
+```nginx
+server {
+    server_name seudominio.com.br;
+
+    location / {
+        proxy_pass http://127.0.0.1:9765;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Depois de configurar, `nginx -t && systemctl reload nginx` (ou equivalente).
+
+## 5. Webhook do Mercado Pago
+
+No painel do Mercado Pago (produção), atualizar a URL de notificação para:
+
+```
+https://seudominio.com.br/webhook/mercadopago
+```
+
+Copiar o webhook secret gerado lá e colar em `MERCADO_PAGO_WEBHOOK_SECRET`
+no `.env` da VPS, depois:
+
+```bash
+docker compose --env-file .env -f Infra/docker-compose.prod.yml up -d --build
+```
+
+(reinicia a app já com o secret novo carregado).
+
+## 6. Manutenção
+
+Sempre com `-f Infra/docker-compose.prod.yml` (e `--env-file .env` nos
+comandos que sobem/recriam containers, como `up`):
+
+- Ver logs: `docker compose -f Infra/docker-compose.prod.yml logs -f` (todos)
+  ou `... logs -f app`
+- Reiniciar só a app: `docker compose -f Infra/docker-compose.prod.yml restart app`
+- Atualizar após `git pull`:
+  `docker compose --env-file .env -f Infra/docker-compose.prod.yml up -d --build`
+  (reaplica `alembic upgrade head` automaticamente no start do container)
+- Derrubar tudo: `docker compose -f Infra/docker-compose.prod.yml down` —
+  **não** apaga o volume `pgdata`, os dados do banco continuam. Para apagar
+  de fato: `docker compose -f Infra/docker-compose.prod.yml down -v`
+  (cuidado, isso é destrutivo).
+
+## 7. Isolamento — o que isso garante
+
+- Postgres **não** expõe porta nenhuma ao host nem à VPS — só existe dentro
+  da rede interna do compose (`liliankaliaki_internal`).
+- A app só é alcançável via `127.0.0.1:9765`, ou seja, só o processo do
+  reverse proxy da própria VPS consegue falar com ela — nada é exposto
+  diretamente à internet pelo container.
+- Containers, rede e volume são todos namespaced por `liliankaliaki` (campo
+  `name:` no `docker-compose.prod.yml`), então não colidem com os outros
+  projetos mesmo que usem nomes genéricos como `db` ou `app`.
+- `Infra/docker-compose.yml` (usado em dev/Codespace e pela suíte de testes)
+  não foi alterado — o fluxo de desenvolvimento continua igual.

@@ -1,0 +1,44 @@
+# Stack de PRODUCAO (app + db), isolada dos outros projetos da VPS.
+# Uso (a partir da raiz do repo):
+#   docker compose --env-file .env -f Infra/docker-compose.prod.yml up -d --build
+# O --env-file .env e obrigatorio: o arquivo fica em Infra/ mas o .env de segredos
+# fica na raiz, e o compose por padrao so procura .env na pasta do proprio arquivo.
+# Para dev/testes locais continue usando Infra/docker-compose.yml (nao mexer nesse).
+name: liliankaliaki
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: app_db
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  app:
+    build:
+      context: ..
+      dockerfile: Infra/Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:${DB_PASSWORD}@db:5432/app_db
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${APP_PORT:-9765}:8000"
+    networks: [internal]
+
+networks:
+  internal:
+
+volumes:
+  pgdata:

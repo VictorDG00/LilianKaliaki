@@ -1,0 +1,13 @@
+.git
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+testes/
+.env
+Infra/
+CLAUDE.md
+sprint_0.3.md
+step-by-step.md
+README.md
