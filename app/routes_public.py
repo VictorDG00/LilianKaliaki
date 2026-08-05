@@ -11,7 +11,16 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.database import get_session
-from app.models import Contato, Disponibilidade, Reserva, Servico, StatusReserva
+from app.models import (
+    Contato,
+    Disponibilidade,
+    Pedido,
+    Produto,
+    Reserva,
+    StatusPedido,
+    StatusReserva,
+    Servico,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -19,10 +28,41 @@ templates = Jinja2Templates(directory="templates")
 RESERVA_ATIVA = (StatusReserva.PENDENTE, StatusReserva.CONFIRMADA)
 
 
+def _criar_preferencia_mp(titulo: str, preco: float, external_reference: str) -> str:
+    sdk = mercadopago.SDK(settings.MERCADO_PAGO_ACCESS_TOKEN)
+    resp = sdk.preference().create(
+        {
+            "items": [{"title": titulo, "quantity": 1, "unit_price": preco}],
+            "external_reference": external_reference,
+        }
+    )
+    return resp["response"]["id"]
+
+
+async def _upsert_contato(
+    session: AsyncSession, nome: str, email: str, telefone: str, consentimento_marketing: bool
+) -> Contato:
+    contato = (await session.exec(select(Contato).where(Contato.email == email))).first()
+    if contato is None:
+        contato = Contato(
+            nome=nome, email=email, telefone=telefone, consentimento_marketing=consentimento_marketing
+        )
+        session.add(contato)
+    else:
+        contato.nome = nome
+        contato.telefone = telefone
+        contato.consentimento_marketing = consentimento_marketing
+    await session.flush()
+    return contato
+
+
 @router.get("/")
 async def index(request: Request, session: AsyncSession = Depends(get_session)):
     servicos = (await session.exec(select(Servico).where(Servico.ativo == True))).all()
-    return templates.TemplateResponse(request, "index.html", {"servicos": servicos})
+    produtos = (await session.exec(select(Produto).where(Produto.ativo == True))).all()
+    return templates.TemplateResponse(
+        request, "index.html", {"servicos": servicos, "produtos": produtos}
+    )
 
 
 @router.get("/horarios-livres")
@@ -95,17 +135,7 @@ async def reservar(
             request, "partials/erro.html", {"mensagem": "Serviço indisponível."}, status_code=400
         )
 
-    contato = (await session.exec(select(Contato).where(Contato.email == email))).first()
-    if contato is None:
-        contato = Contato(
-            nome=nome, email=email, telefone=telefone, consentimento_marketing=consentimento_marketing
-        )
-        session.add(contato)
-    else:
-        contato.nome = nome
-        contato.telefone = telefone
-        contato.consentimento_marketing = consentimento_marketing
-    await session.flush()
+    contato = await _upsert_contato(session, nome, email, telefone, consentimento_marketing)
 
     slot_ocupado = (
         await session.exec(
@@ -148,14 +178,7 @@ async def reservar(
 
     await session.refresh(reserva)
 
-    sdk = mercadopago.SDK(settings.MERCADO_PAGO_ACCESS_TOKEN)
-    preference_resp = sdk.preference().create(
-        {
-            "items": [{"title": servico.titulo, "quantity": 1, "unit_price": servico.preco}],
-            "external_reference": str(reserva.id),
-        }
-    )
-    preference_id = preference_resp["response"]["id"]
+    preference_id = _criar_preferencia_mp(servico.titulo, servico.preco, f"reserva:{reserva.id}")
 
     return templates.TemplateResponse(
         request,
@@ -163,6 +186,44 @@ async def reservar(
         {
             "preference_id": preference_id,
             "public_key": settings.MERCADO_PAGO_PUBLIC_KEY,
-            "reserva_id": reserva.id,
+            "titulo": "Reserva criada",
+            "mensagem": "Finalize o pagamento para confirmar seu horário (a reserva expira em 15 minutos).",
+        },
+    )
+
+
+@router.post("/comprar")
+async def comprar(
+    request: Request,
+    produto_id: int = Form(...),
+    nome: str = Form(...),
+    email: str = Form(...),
+    telefone: str = Form(...),
+    consentimento_marketing: bool = Form(False),
+    session: AsyncSession = Depends(get_session),
+):
+    produto = await session.get(Produto, produto_id)
+    if produto is None or not produto.ativo:
+        return templates.TemplateResponse(
+            request, "partials/erro.html", {"mensagem": "Produto indisponível."}, status_code=400
+        )
+
+    contato = await _upsert_contato(session, nome, email, telefone, consentimento_marketing)
+
+    pedido = Pedido(produto_id=produto_id, contato_id=contato.id, status=StatusPedido.PENDENTE)
+    session.add(pedido)
+    await session.commit()
+    await session.refresh(pedido)
+
+    preference_id = _criar_preferencia_mp(produto.titulo, produto.preco, f"pedido:{pedido.id}")
+
+    return templates.TemplateResponse(
+        request,
+        "partials/checkout.html",
+        {
+            "preference_id": preference_id,
+            "public_key": settings.MERCADO_PAGO_PUBLIC_KEY,
+            "titulo": "Pedido criado",
+            "mensagem": "Finalize o pagamento para confirmar sua compra.",
         },
     )

@@ -53,7 +53,7 @@ async def _seed_reserva(session):
 
 async def test_assinatura_valida_confirma_reserva(client, session, monkeypatch):
     reserva = await _seed_reserva(session)
-    _FakeSDK.response = {"status": "approved", "external_reference": str(reserva.id)}
+    _FakeSDK.response = {"status": "approved", "external_reference": f"reserva:{reserva.id}"}
     monkeypatch.setattr(routes_webhook.mercadopago, "SDK", _FakeSDK)
 
     ts = str(int(datetime.utcnow().timestamp()))
@@ -74,7 +74,7 @@ async def test_assinatura_valida_confirma_reserva(client, session, monkeypatch):
 
 async def test_assinatura_invalida_retorna_401_e_nao_altera_banco(client, session, monkeypatch):
     reserva = await _seed_reserva(session)
-    _FakeSDK.response = {"status": "approved", "external_reference": str(reserva.id)}
+    _FakeSDK.response = {"status": "approved", "external_reference": f"reserva:{reserva.id}"}
     monkeypatch.setattr(routes_webhook.mercadopago, "SDK", _FakeSDK)
 
     resp = await client.post(
@@ -99,7 +99,7 @@ async def test_assinatura_ausente_retorna_401(client, session, monkeypatch):
 
 async def test_replay_do_mesmo_payment_id_e_idempotente(client, session, monkeypatch):
     reserva = await _seed_reserva(session)
-    _FakeSDK.response = {"status": "approved", "external_reference": str(reserva.id)}
+    _FakeSDK.response = {"status": "approved", "external_reference": f"reserva:{reserva.id}"}
     monkeypatch.setattr(routes_webhook.mercadopago, "SDK", _FakeSDK)
 
     ts = str(int(datetime.utcnow().timestamp()))

@@ -1,4 +1,4 @@
-# Modelos SQLModel (Servico, Contato, Reserva)
+# Modelos SQLModel (Servico, Contato, Reserva, Produto, Pedido)
 
 from datetime import datetime, time
 from typing import Optional, List
@@ -40,5 +40,28 @@ class Reserva(SQLModel, table=True):
     data_hora: datetime = Field(index=True)
     status: StatusReserva = Field(default=StatusReserva.PENDENTE)
     expira_em: datetime
+    mp_payment_id: Optional[str] = None
+    criado_em: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Produto(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    titulo: str
+    descricao: Optional[str] = None
+    preco: float
+    ativo: bool = Field(default=True)
+
+
+class StatusPedido(str, Enum):
+    PENDENTE = "Pendente"
+    CONFIRMADO = "Confirmado"
+    CANCELADO = "Cancelado"
+
+
+class Pedido(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    produto_id: int = Field(foreign_key="produto.id")
+    contato_id: int = Field(foreign_key="contato.id")
+    status: StatusPedido = Field(default=StatusPedido.PENDENTE)
     mp_payment_id: Optional[str] = None
     criado_em: datetime = Field(default_factory=datetime.utcnow)

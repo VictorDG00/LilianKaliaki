@@ -9,7 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.database import get_session
-from app.models import Reserva, StatusReserva
+from app.models import Pedido, Reserva, StatusPedido, StatusReserva
 
 router = APIRouter()
 
@@ -38,19 +38,33 @@ async def mercadopago_webhook(request: Request, session: AsyncSession = Depends(
     if pagamento.get("status") != "approved":
         return {"status": "ignored"}
 
-    external_reference = pagamento.get("external_reference")
-    if not external_reference:
+    external_reference = pagamento.get("external_reference") or ""
+    tipo, _, id_str = external_reference.partition(":")
+    if not id_str.isdigit():
         return {"status": "ignored"}
 
-    reserva = await session.get(Reserva, int(external_reference))
-    if reserva is None:
-        return {"status": "ignored"}
-
-    if reserva.status == StatusReserva.CONFIRMADA and reserva.mp_payment_id == data_id:
+    if tipo == "reserva":
+        reserva = await session.get(Reserva, int(id_str))
+        if reserva is None:
+            return {"status": "ignored"}
+        if reserva.status == StatusReserva.CONFIRMADA and reserva.mp_payment_id == data_id:
+            return {"status": "ok"}
+        reserva.status = StatusReserva.CONFIRMADA
+        reserva.mp_payment_id = data_id
+        session.add(reserva)
+        await session.commit()
         return {"status": "ok"}
 
-    reserva.status = StatusReserva.CONFIRMADA
-    reserva.mp_payment_id = data_id
-    session.add(reserva)
-    await session.commit()
-    return {"status": "ok"}
+    if tipo == "pedido":
+        pedido = await session.get(Pedido, int(id_str))
+        if pedido is None:
+            return {"status": "ignored"}
+        if pedido.status == StatusPedido.CONFIRMADO and pedido.mp_payment_id == data_id:
+            return {"status": "ok"}
+        pedido.status = StatusPedido.CONFIRMADO
+        pedido.mp_payment_id = data_id
+        session.add(pedido)
+        await session.commit()
+        return {"status": "ok"}
+
+    return {"status": "ignored"}

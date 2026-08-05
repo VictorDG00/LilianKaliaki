@@ -1,29 +1,64 @@
 {% extends "base.html" %}
 
-{% block title %}Agendar horário{% endblock %}
+{% block title %}Lilian Kaliaki — Agendamento e Produtos{% endblock %}
 
 {% block content %}
-<h1>Serviços disponíveis</h1>
+<section class="hero">
+  <h1>Beleza e cuidado, do jeito certo</h1>
+  <p>Agende seu horário ou leve pra casa os produtos que a gente mesma recomenda.</p>
+</section>
 
-<div class="servicos">
-  {% for servico in servicos %}
-  <div class="card">
-    <h2>{{ servico.titulo }}</h2>
-    <p>{{ servico.descricao }}</p>
-    <p><strong>R$ {{ "%.2f"|format(servico.preco) }}</strong> — {{ servico.duracao_min }} min</p>
-    <form hx-get="/horarios-livres" hx-target="#horarios" hx-swap="innerHTML">
-      <input type="hidden" name="servico_id" value="{{ servico.id }}">
-      <label>
-        Escolha uma data:
-        <input type="date" name="data_str" required>
-      </label>
-      <button class="btn" type="submit">Ver horários</button>
-    </form>
+<section id="servicos" class="section">
+  <h2>Serviços</h2>
+  <div class="grid">
+    {% for servico in servicos %}
+    <div class="card">
+      <h3>{{ servico.titulo }}</h3>
+      <p class="descricao">{{ servico.descricao }}</p>
+      <p class="preco">R$ {{ "%.2f"|format(servico.preco) }} <span class="duracao">· {{ servico.duracao_min }} min</span></p>
+      <form hx-get="/horarios-livres" hx-target="#horarios" hx-swap="innerHTML">
+        <input type="hidden" name="servico_id" value="{{ servico.id }}">
+        <label>
+          Escolha uma data
+          <input type="date" name="data_str" required>
+        </label>
+        <button class="btn" type="submit">Ver horários</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="vazio">Nenhum serviço disponível no momento.</p>
+    {% endfor %}
   </div>
-  {% else %}
-  <p>Nenhum serviço disponível no momento.</p>
-  {% endfor %}
-</div>
+  <div id="horarios"></div>
+</section>
 
-<div id="horarios"></div>
+<section id="produtos" class="section">
+  <h2>Produtos</h2>
+  <div class="grid">
+    {% for produto in produtos %}
+    <div class="card">
+      <h3>{{ produto.titulo }}</h3>
+      <p class="descricao">{{ produto.descricao }}</p>
+      <p class="preco">R$ {{ "%.2f"|format(produto.preco) }}</p>
+      <details>
+        <summary class="btn btn-outline">Comprar</summary>
+        <form hx-post="/comprar" hx-target="#checkout-produtos" hx-swap="innerHTML">
+          <input type="hidden" name="produto_id" value="{{ produto.id }}">
+          <label>Nome <input type="text" name="nome" required></label>
+          <label>Email <input type="email" name="email" required></label>
+          <label>Telefone <input type="tel" name="telefone" required></label>
+          <label class="checkbox">
+            <input type="checkbox" name="consentimento_marketing" value="true">
+            Aceito receber novidades por email
+          </label>
+          <button class="btn" type="submit">Confirmar compra</button>
+        </form>
+      </details>
+    </div>
+    {% else %}
+    <p class="vazio">Nenhum produto disponível no momento.</p>
+    {% endfor %}
+  </div>
+  <div id="checkout-produtos"></div>
+</section>
 {% endblock %}
