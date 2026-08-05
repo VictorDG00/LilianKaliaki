@@ -2,9 +2,9 @@
 
 O repo já vem pronto pra rodar containerizado: `Infra/Dockerfile` +
 `Infra/docker-compose.prod.yml` sobem a app e o Postgres em containers
-próprios, numa rede interna própria (`liliankaliaki`), sem expor o banco ao
-host e sem tocar em nada dos outros projetos que já estão na VPS. O que
-falta é só o que só você pode decidir/fazer na própria VPS — segue abaixo.
+próprios, sem expor o banco ao host e sem tocar em nada dos outros projetos
+que já estão na VPS (`srv1662201`). O que falta é só o que só você pode
+decidir/fazer na própria VPS — segue abaixo.
 
 Todos os comandos abaixo rodam **a partir da raiz do repo** (não de dentro de
 `Infra/`) e sempre com `--env-file .env` — o arquivo de compose fica em
@@ -19,6 +19,29 @@ alias dc='docker compose --env-file .env -f Infra/docker-compose.prod.yml'
 (daí os comandos viram só `dc up -d --build`, `dc ps`, etc. — opcional, os
 exemplos abaixo usam a forma completa para não depender do alias).
 
+## 0. Pendências antes de seguir este guia numa VPS de verdade
+
+A `srv1662201` não usa nginx no host + certbot + porta publicada — ela usa um
+`nginx-proxy` **em container**, numa rede Docker compartilhada (`vps-proxy`),
+com TLS terminado no Cloudflare. Este guia já descreve esse fluxo final, mas
+três coisas ainda **não** estão implementadas no repo e precisam ser feitas
+antes dos passos 3–4 funcionarem numa VPS real:
+
+- **Rota `/healthz`** — não existe ainda no app (checado: nenhum
+  `app/*.py` tem `healthz`/`health_check`). Precisa existir e checar conexão
+  com o banco, porque o deploy da VPS usa `--wait` e depende dela.
+- **`Infra/docker-compose.prod.yml`** hoje publica porta pro host
+  (`127.0.0.1:${APP_PORT}:8000`) e não tem healthcheck no serviço `app`.
+  Precisa virar `expose: ["8000"]` + entrar também na rede externa
+  `vps-proxy` + `container_name: liliankaliaki` fixo (o proxy resolve o
+  upstream por esse nome) + healthcheck usando a rota acima.
+- **`Infra/Dockerfile`** sobe o uvicorn sem `--proxy-headers
+  --forwarded-allow-ips="*"` — necessário atrás do proxy compartilhado, senão
+  `request.url_for()` e o IP do cliente saem errados.
+
+Essas mudanças de infra ficam para depois (fora do escopo desta atualização
+do doc) — só o texto do guia foi alinhado com o que a VPS de verdade exige.
+
 ## 1. Pré-requisitos na VPS
 
 Só precisa de Docker + Docker Compose plugin instalados:
@@ -32,9 +55,11 @@ Se não tiver, instalar Docker Engine (docs oficiais do Docker) antes de continu
 
 ## 2. Copiar o repo e criar o `.env` de produção
 
+Seguindo a convenção de diretório já usada nos outros projetos da VPS:
+
 ```bash
-git clone <url-do-repo> liliankaliaki
-cd liliankaliaki
+git clone <url-do-repo> /home/victor/Projetos/Publicado/liliankaliaki
+cd /home/victor/Projetos/Publicado/liliankaliaki
 cp .env.exemple .env
 ```
 
@@ -53,8 +78,10 @@ valores reais de produção:
 - `ADMIN_USERNAME` / `ADMIN_PASSWORD` — credenciais reais do `/admin`, senha forte.
 - `DB_PASSWORD` — senha forte só para o Postgres de produção (variável nova,
   usada pelo `docker-compose.yml`).
-- `APP_PORT=9765` — porta escolhida para não colidir com os outros projetos
-  da VPS (já é o padrão do compose, só precisa bater se você quiser mudar).
+
+Não precisa mais de `APP_PORT`: como a app deixa de publicar porta no host
+(rede compartilhada `vps-proxy`, ver seção 0), essa variável some do modelo
+final — ela só existe hoje porque o compose ainda usa o formato antigo.
 
 ## 3. Subir a stack
 
@@ -66,36 +93,53 @@ docker compose -f Infra/docker-compose.prod.yml logs -f app
 
 Espera-se ver no log o `alembic upgrade head` rodando sem erro e depois o
 uvicorn subindo (`Uvicorn running on http://0.0.0.0:8000`). `docker compose ps`
-deve mostrar `db` como `healthy` e `app` como `running`.
+deve mostrar `db` e `app` como `healthy` (assumindo as pendências da seção 0
+já resolvidas).
 
-Teste local na própria VPS (antes de configurar o proxy):
+Teste local na própria VPS (antes de configurar o proxy) — como a app não
+publica mais porta no host, o teste é de dentro da rede Docker, via o próprio
+`nginx-proxy`:
 
 ```bash
-curl -i http://127.0.0.1:9765/
+docker exec nginx-proxy wget -qO- http://liliankaliaki:8000/healthz
 ```
 
-## 4. Configurar o reverse proxy existente
+## 4. Configurar o reverse proxy compartilhado (`nginx-proxy`)
 
-A app só escuta em `127.0.0.1:9765` — não é exposta à internet diretamente,
-só o reverse proxy que já roda os outros projetos da VPS enxerga essa porta.
-Exemplo de bloco nginx (adaptar para o seu domínio e para o padrão de TLS que
-os outros projetos já usam, ex: certbot):
+A app **não** é alcançável por `127.0.0.1:porta` — ela só existe dentro da
+rede Docker `vps-proxy`, e quem fala com ela de fora é o container
+`nginx-proxy` que já roteia os outros projetos da VPS, pelo nome do container
+(`liliankaliaki:8000`). TLS é terminado no Cloudflare — a origem fala HTTP
+puro, então **não** tem `listen 443`/certbot nesse bloco:
 
 ```nginx
 server {
+    listen 80;
     server_name seudominio.com.br;
 
     location / {
-        proxy_pass http://127.0.0.1:9765;
+        proxy_pass http://liliankaliaki:8000;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Real-IP $http_cf_connecting_ip;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
 
-Depois de configurar, `nginx -t && systemctl reload nginx` (ou equivalente).
+Editar em `vps-infra/proxy/nginx.conf`, copiar para
+`/home/victor/codigo/nginx-proxy/nginx.conf` (é de lá que o container monta
+o arquivo) e recarregar sem downtime:
+
+```bash
+docker exec nginx-proxy nginx -t && docker exec nginx-proxy nginx -s reload
+```
+
+No Cloudflare: registro **A → IP da VPS com proxy laranja ligado**, e
+**SSL/TLS em "Full" (idealmente "Full Strict" com Origin CA cert)** — não
+"Flexible". Esse projeto processa pagamento (Mercado Pago) e dados pessoais
+de agendamento/pedido, então vale terminar TLS de verdade na origem em vez de
+deixar Cloudflare→VPS em HTTP puro pela internet pública.
 
 ## 5. Webhook do Mercado Pago
 
@@ -105,8 +149,9 @@ No painel do Mercado Pago (produção), atualizar a URL de notificação para:
 https://seudominio.com.br/webhook/mercadopago
 ```
 
-Copiar o webhook secret gerado lá e colar em `MERCADO_PAGO_WEBHOOK_SECRET`
-no `.env` da VPS, depois:
+(a URL pública não muda — quem muda é só o que termina o TLS na frente dela,
+ver seção 4). Copiar o webhook secret gerado lá e colar em
+`MERCADO_PAGO_WEBHOOK_SECRET` no `.env` da VPS, depois:
 
 ```bash
 docker compose --env-file .env -f Infra/docker-compose.prod.yml up -d --build
@@ -130,13 +175,18 @@ comandos que sobem/recriam containers, como `up`):
   de fato: `docker compose -f Infra/docker-compose.prod.yml down -v`
   (cuidado, isso é destrutivo).
 
+Deploy aqui é manual (`git pull` + `up -d --build`) — a VPS tem uma esteira
+de CI/CD com runner self-hosted disponível para os outros projetos (PR
+`dev`→`main` aprovado dispara deploy sozinho), mas configurar isso pra este
+projeto é opcional e fica fora do escopo deste guia por enquanto.
+
 ## 7. Isolamento — o que isso garante
 
 - Postgres **não** expõe porta nenhuma ao host nem à VPS — só existe dentro
   da rede interna do compose (`liliankaliaki_internal`).
-- A app só é alcançável via `127.0.0.1:9765`, ou seja, só o processo do
-  reverse proxy da própria VPS consegue falar com ela — nada é exposto
-  diretamente à internet pelo container.
+- A app não publica porta nenhuma para fora — só é alcançável dentro da rede
+  Docker compartilhada `vps-proxy`, e só o container `nginx-proxy` fala com
+  ela (pelo nome do container, não por IP/porta do host).
 - Containers, rede e volume são todos namespaced por `liliankaliaki` (campo
   `name:` no `docker-compose.prod.yml`), então não colidem com os outros
   projetos mesmo que usem nomes genéricos como `db` ou `app`.
