@@ -1,5 +1,6 @@
 # Endpoints HTMX para a página pública e reservas
 
+import logging
 from datetime import date, datetime, timedelta
 
 import mercadopago
@@ -24,6 +25,7 @@ from app.models import (
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
+logger = logging.getLogger(__name__)
 
 RESERVA_ATIVA = (StatusReserva.PENDENTE, StatusReserva.CONFIRMADA)
 
@@ -265,8 +267,19 @@ async def pagar(request: Request):
     payload["external_reference"] = external_reference
     try:
         resp = sdk.payment().create(payload)
-        status = resp.get("response", {}).get("status", "rejected")
+        corpo = resp.get("response", {})
+        # resp["status"] é o status HTTP da chamada; resp["response"]["status"]
+        # só é o status do pagamento (approved/pending/rejected) quando a
+        # chamada deu certo — em erro, o corpo do MP também tem um campo
+        # "status" com o código HTTP repetido, então não dá pra confiar nele
+        # sem checar o status HTTP primeiro.
+        if resp.get("status", 500) >= 300:
+            logger.warning("Pagamento nao aprovado: %s", corpo)
+            status = "rejected"
+        else:
+            status = corpo.get("status", "rejected")
     except Exception:
+        logger.exception("Falha ao chamar sdk.payment().create()")
         status = "rejected"
 
     return {"status": status}
