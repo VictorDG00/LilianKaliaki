@@ -1,0 +1,21 @@
+# arquivo docker do postgres 16
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_db
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"] # Volume persistente 
+  db_test:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_db_test
+    ports: ["5433:5432"]
+    tmpfs: ["/var/lib/postgresql/data"] # Volume descartavel
+
+volumes:
+  pgdata:

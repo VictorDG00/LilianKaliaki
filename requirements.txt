@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlmodel
+asyncpg
+sqladmin
+jinja2
+python-multipart
+pydantic-settings
+mercadopago
+pytest
+pytest-asyncio
+httpx
+alembic
