@@ -4,7 +4,7 @@
   <div id="checkout-brick"></div>
   <script>
     const mp = new MercadoPago("{{ public_key }}");
-    mp.bricks().create("payment", "checkout-brick", {
+    mp.bricks().create("wallet", "checkout-brick", {
       initialization: {
         preferenceId: "{{ preference_id }}",
       },
