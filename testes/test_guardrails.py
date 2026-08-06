@@ -6,11 +6,16 @@ Se um teste daqui quebrar, e regressao — nao "teste desatualizado".
 from pathlib import Path
 
 from fastapi.routing import APIRoute
-from starlette.routing import Mount
 
+import app.routes_public as routes_public
+import app.routes_webhook as routes_webhook
 from app.config import Settings
 from app.main import app
 from app.models import Post
+
+# Routers proprios do app. Um router novo que nao entre aqui ainda e pego pelo
+# openapi(), desde que as rotas dele apareçam no schema.
+ROUTERS_DO_APP = (routes_public.router, routes_webhook.router)
 
 # Guardrail 1: as unicas rotas de escrita do app. Qualquer POST/PUT/PATCH/DELETE
 # novo tem que ser adicionado aqui CONSCIENTEMENTE, num PR que explique por que.
@@ -24,41 +29,57 @@ ROTAS_DE_ESCRITA_CONHECIDAS = {
 METODOS_DE_ESCRITA = {"POST", "PUT", "PATCH", "DELETE"}
 
 
-def _rotas_de_escrita(rotas) -> set:
-    """Percorre a arvore de rotas.
+def _escrita_pelo_openapi() -> set:
+    """Fonte 1: o schema OpenAPI — API publica, enxerga qualquer router incluido.
 
-    O FastAPI nao achata os routers incluidos em app.routes — eles viram um
-    _IncludedRouter, que guarda o APIRouter original em `original_router`.
-    Uma varredura rasa nao enxerga nenhum POST. Se essa estrutura interna mudar
-    numa versao futura, o test_varredura_enxerga_as_rotas_de_escrita quebra e
-    avisa, em vez deste guardrail passar a aprovar tudo em silencio.
-
-    Mount e ignorado de proposito: sao os sub-apps /admin (SQLAdmin, com forms
-    proprios) e /static.
+    Ponto cego: rota declarada com include_in_schema=False nao aparece aqui.
     """
-    encontradas = set()
-    for rota in rotas:
-        if isinstance(rota, Mount):
-            continue
-        if isinstance(rota, APIRoute):
-            encontradas |= {
-                (rota.path, metodo) for metodo in rota.methods if metodo in METODOS_DE_ESCRITA
-            }
-        elif hasattr(rota, "original_router"):
-            encontradas |= _rotas_de_escrita(rota.original_router.routes)
-        elif hasattr(rota, "routes"):
-            encontradas |= _rotas_de_escrita(rota.routes)
-    return encontradas
+    return {
+        (caminho, metodo.upper())
+        for caminho, operacoes in app.openapi()["paths"].items()
+        for metodo in operacoes
+        if metodo.upper() in METODOS_DE_ESCRITA
+    }
 
 
-def test_varredura_enxerga_as_rotas_de_escrita():
-    """Trava do proprio guardrail: se a varredura voltar vazia, ela nao esta protegendo nada."""
-    assert _rotas_de_escrita(app.routes)
+def _escrita_pelos_routers() -> set:
+    """Fonte 2: o atributo publico .routes do app e dos nossos APIRouters.
+
+    Cobre o ponto cego do openapi (include_in_schema=False). Nao percorre a
+    arvore de app.routes de proposito: os routers incluidos viram um objeto
+    interno do FastAPI, e depender do formato dele deixaria o guardrail refem
+    de detalhe de versao. Aqui so se usa atributo publico.
+
+    Os Mounts /admin (SQLAdmin) e /static ficam de fora naturalmente: nao sao
+    APIRoute.
+    """
+    candidatas = list(app.routes) + [r for router in ROUTERS_DO_APP for r in router.routes]
+    return {
+        (rota.path, metodo)
+        for rota in candidatas
+        if isinstance(rota, APIRoute)
+        for metodo in rota.methods
+        if metodo in METODOS_DE_ESCRITA
+    }
+
+
+def rotas_de_escrita() -> set:
+    return _escrita_pelo_openapi() | _escrita_pelos_routers()
+
+
+def test_as_duas_fontes_enxergam_rotas():
+    """Trava do proprio guardrail: fonte que volta vazia nao protege nada.
+
+    Se uma versao futura do FastAPI mudar openapi() ou .routes, isto quebra
+    antes de o guardrail virar decoracao que aprova tudo em silencio.
+    """
+    assert _escrita_pelo_openapi()
+    assert _escrita_pelos_routers()
 
 
 def test_nenhuma_rota_de_escrita_inesperada():
     """O blog e so leitura: se ele ganhar um POST, este teste quebra."""
-    assert _rotas_de_escrita(app.routes) == ROTAS_DE_ESCRITA_CONHECIDAS
+    assert rotas_de_escrita() == ROTAS_DE_ESCRITA_CONHECIDAS
 
 
 def test_post_nao_tem_campo_de_preco_nem_status():
