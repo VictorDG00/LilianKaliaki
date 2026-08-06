@@ -64,4 +64,24 @@
   </div>
   <div id="checkout-produtos"></div>
 </section>
+
+{% if posts %}
+<section id="blog" class="section">
+  <h2>No blog</h2>
+  <div class="grid">
+    {% for post in posts %}
+    <article class="card">
+      {% if post.imagem_url %}
+      <img class="post-capa" src="{{ post.imagem_url }}" alt="" loading="lazy">
+      {% endif %}
+      <h3>{{ post.titulo }}</h3>
+      {% if post.resumo %}<p class="descricao">{{ post.resumo }}</p>{% endif %}
+      {# link, nunca form ou botao de compra: o blog nao vende (guardrail 1) #}
+      <a class="btn btn-outline" href="/blog/{{ post.slug }}">Ler</a>
+    </article>
+    {% endfor %}
+  </div>
+  <p class="ver-todos"><a href="/blog">Ver todas as publicações</a></p>
+</section>
+{% endif %}
 {% endblock %}

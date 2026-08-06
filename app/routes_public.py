@@ -4,7 +4,7 @@ import logging
 from datetime import date, datetime, timedelta
 
 import mercadopago
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
@@ -17,6 +17,7 @@ from app.models import (
     Contato,
     Disponibilidade,
     Pedido,
+    Post,
     Produto,
     Reserva,
     StatusPedido,
@@ -34,6 +35,16 @@ templates = Jinja2Templates(
 logger = logging.getLogger(__name__)
 
 RESERVA_ATIVA = (StatusReserva.PENDENTE, StatusReserva.CONFIRMADA)
+
+POSTS_NA_HOME = 3
+
+
+def _posts_publicados(limit: int | None = None):
+    """Rascunho (publicado=False) nunca sai daqui — guardrail 6 da sprint_0.4."""
+    consulta = (
+        select(Post).where(Post.publicado == True).order_by(Post.publicado_em.desc())  # noqa: E712
+    )
+    return consulta.limit(limit) if limit else consulta
 
 
 async def _upsert_contato(
@@ -57,9 +68,27 @@ async def _upsert_contato(
 async def index(request: Request, session: AsyncSession = Depends(get_session)):
     servicos = (await session.exec(select(Servico).where(Servico.ativo == True))).all()
     produtos = (await session.exec(select(Produto).where(Produto.ativo == True))).all()
+    posts = (await session.exec(_posts_publicados(POSTS_NA_HOME))).all()
     return templates.TemplateResponse(
-        request, "index.html", {"servicos": servicos, "produtos": produtos}
+        request, "index.html", {"servicos": servicos, "produtos": produtos, "posts": posts}
     )
+
+
+@router.get("/blog")
+async def blog(request: Request, session: AsyncSession = Depends(get_session)):
+    posts = (await session.exec(_posts_publicados())).all()
+    return templates.TemplateResponse(request, "blog.html", {"posts": posts})
+
+
+@router.get("/blog/{slug}")
+async def post_detalhe(
+    request: Request, slug: str, session: AsyncSession = Depends(get_session)
+):
+    post = (await session.exec(select(Post).where(Post.slug == slug))).first()
+    if post is None or not post.publicado:
+        # rascunho responde 404 igual a slug inexistente: nao vaza a existencia do post
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(request, "post.html", {"post": post})
 
 
 @router.get("/agendar/passo-data")

@@ -65,3 +65,21 @@ class Pedido(SQLModel, table=True):
     status: StatusPedido = Field(default=StatusPedido.PENDENTE)
     mp_payment_id: Optional[str] = None
     criado_em: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Post(SQLModel, table=True):
+    """Conteudo editorial. NAO vende: sem preco, sem status de pedido.
+
+    E a diferenca estrutural em relacao ao Produto, e o que impede o blog de
+    virar caminho de compra por acidente (guardrail 1 da sprint_0.4).
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    titulo: str
+    slug: str = Field(index=True, unique=True)
+    resumo: Optional[str] = None  # card na home + meta description
+    conteudo: str  # texto puro; quebras de linha preservadas no CSS
+    imagem_url: Optional[str] = None  # link externo, sem upload
+    publicado: bool = Field(default=False)  # rascunho nao aparece em lugar nenhum
+    publicado_em: Optional[datetime] = None
+    criado_em: datetime = Field(default_factory=datetime.utcnow)

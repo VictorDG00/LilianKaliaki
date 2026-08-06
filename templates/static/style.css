@@ -340,3 +340,65 @@ input[type="tel"] {
   border-color: var(--primary);
   color: var(--primary);
 }
+
+/* ── Blog ─────────────────────────────────────────────────────────── */
+
+.post-capa {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+}
+
+.post-capa-grande {
+  aspect-ratio: 21 / 9;
+  margin: 1.5rem 0;
+}
+
+.post-data {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.ver-todos {
+  margin-top: 1rem;
+}
+
+.ver-todos a,
+.post-voltar a {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ver-todos a:hover,
+.post-voltar a:hover {
+  text-decoration: underline;
+}
+
+.post {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2rem 0;
+}
+
+.post h1 {
+  color: var(--primary-dark);
+  line-height: 1.2;
+}
+
+/* Conteudo e texto puro: as quebras de linha do textarea viram os paragrafos. */
+.post-body {
+  white-space: pre-wrap;
+  color: var(--ink);
+  line-height: 1.7;
+  font-size: 1.05rem;
+}
+
+.post-voltar {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}

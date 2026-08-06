@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ post.titulo }} — Lilian Kaliaki{% endblock %}
+
+{% block head %}
+{% set url = request.url_for('post_detalhe', slug=post.slug) %}
+{% if post.resumo %}<meta name="description" content="{{ post.resumo }}">{% endif %}
+<link rel="canonical" href="{{ url }}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{{ post.titulo }}">
+{% if post.resumo %}<meta property="og:description" content="{{ post.resumo }}">{% endif %}
+{% if post.imagem_url %}<meta property="og:image" content="{{ post.imagem_url }}">{% endif %}
+<meta property="og:url" content="{{ url }}">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": {{ post.titulo|tojson }},
+  {% if post.resumo %}"description": {{ post.resumo|tojson }},{% endif %}
+  {% if post.imagem_url %}"image": {{ post.imagem_url|tojson }},{% endif %}
+  {% if post.publicado_em %}"datePublished": {{ post.publicado_em.isoformat()|tojson }},{% endif %}
+  "author": {"@type": "Person", "name": "Lilian Kaliaki"},
+  "mainEntityOfPage": {{ url|string|tojson }}
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<article class="post">
+  <h1>{{ post.titulo }}</h1>
+  {% if post.publicado_em %}
+  <p class="post-data">
+    <time datetime="{{ post.publicado_em.isoformat() }}">{{ post.publicado_em.strftime("%d/%m/%Y") }}</time>
+  </p>
+  {% endif %}
+
+  {% if post.imagem_url %}
+  <img class="post-capa post-capa-grande" src="{{ post.imagem_url }}" alt="">
+  {% endif %}
+
+  {# texto puro: o autoescape do Jinja2 cuida do HTML, o pre-wrap cuida das quebras #}
+  <div class="post-body">{{ post.conteudo }}</div>
+
+  <p class="post-voltar"><a href="/blog">← Todas as publicações</a></p>
+</article>
+{% endblock %}

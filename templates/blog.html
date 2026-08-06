@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Blog — Lilian Kaliaki{% endblock %}
+
+{% block content %}
+<section class="section">
+  <h2>Blog</h2>
+  <div class="grid">
+    {% for post in posts %}
+    <article class="card">
+      {% if post.imagem_url %}
+      <img class="post-capa" src="{{ post.imagem_url }}" alt="" loading="lazy">
+      {% endif %}
+      <h3>{{ post.titulo }}</h3>
+      {% if post.resumo %}<p class="descricao">{{ post.resumo }}</p>{% endif %}
+      {% if post.publicado_em %}
+      <p class="post-data">{{ post.publicado_em.strftime("%d/%m/%Y") }}</p>
+      {% endif %}
+      <a class="btn btn-outline" href="/blog/{{ post.slug }}">Ler</a>
+    </article>
+    {% else %}
+    <p class="vazio">Nenhuma publicação por enquanto.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

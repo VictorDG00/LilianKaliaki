@@ -66,6 +66,37 @@ async def robots() -> PlainTextResponse:
     return PlainTextResponse("User-agent: *\nDisallow: /admin\nDisallow: /healthz\n")
 
 
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap(request: Request) -> Response:
+    """So conteudo publico: rascunho, /admin e /healthz nunca entram aqui."""
+    from sqlmodel import select
+
+    from app.database import SessionLocal
+    from app.models import Post
+
+    base = str(request.base_url).rstrip("/")
+    urls = [(f"{base}/", None), (f"{base}/blog", None)]
+    async with SessionLocal() as session:
+        posts = (
+            await session.exec(
+                select(Post).where(Post.publicado == True).order_by(Post.publicado_em.desc())  # noqa: E712
+            )
+        ).all()
+    urls += [(f"{base}/blog/{p.slug}", p.publicado_em) for p in posts]
+
+    corpo = "".join(
+        f"<url><loc>{loc}</loc>"
+        + (f"<lastmod>{quando.date().isoformat()}</lastmod>" if quando else "")
+        + "</url>"
+        for loc, quando in urls
+    )
+    return Response(
+        content=f'<?xml version="1.0" encoding="UTF-8"?>'
+        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{corpo}</urlset>',
+        media_type="application/xml",
+    )
+
+
 app.include_router(routes_public.router)
 app.include_router(routes_webhook.router)
 
