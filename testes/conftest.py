@@ -37,7 +37,7 @@ async def clean_db():
     async with SessionLocal() as db:
         await db.execute(
             text(
-                "TRUNCATE reserva, pedido, contato, servico, produto, disponibilidade "
+                "TRUNCATE reserva, pedido, contato, servico, produto, disponibilidade, post "
                 "RESTART IDENTITY CASCADE"
             )
         )

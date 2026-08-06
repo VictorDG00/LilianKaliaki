@@ -98,7 +98,7 @@ SEO — o `app/main.py` já tem `/robots.txt` e o middleware de `noindex`. Acres
 - **`/sitemap.xml`** dinâmico com `/`, `/blog` e cada post publicado — e **nunca** `/admin`,
   `/checkout`, `/healthz` ou rascunhos
 
-## 6. [ ] Guardrails — regras que a implementação não pode violar
+## 6. [x] Guardrails — regras que a implementação não pode violar
 
 Cada item aqui tem teste correspondente na seção 7. Se um teste desta lista quebrar, é regressão, não
 "teste desatualizado".
@@ -116,7 +116,7 @@ Cada item aqui tem teste correspondente na seção 7. Se um teste desta lista qu
    sitemap.
 7. **Sem dependência nova** no `requirements.txt` por causa do blog.
 
-## 7. [ ] Testes
+## 7. [x] Testes
 
 Seguem o padrão do `testes/conftest.py`: Postgres real, fixture `client` já com o header CSRF.
 
