@@ -12,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.database import get_session
+from app.security import obter_csrf_token, verificar_csrf
 from app.models import (
     Contato,
     Disponibilidade,
@@ -24,7 +25,12 @@ from app.models import (
 )
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
+# O context processor injeta csrf_token em todo template renderizado, sem
+# precisar repetir a chave em cada TemplateResponse.
+templates = Jinja2Templates(
+    directory="templates",
+    context_processors=[lambda request: {"csrf_token": obter_csrf_token(request)}],
+)
 logger = logging.getLogger(__name__)
 
 RESERVA_ATIVA = (StatusReserva.PENDENTE, StatusReserva.CONFIRMADA)
@@ -111,7 +117,10 @@ async def agendar_passo_horarios(
         ).all()
     )
 
-    agora = datetime.utcnow()
+    # Os candidatos vem de Disponibilidade (hora de parede do negocio), entao a
+    # comparacao tem que ser com a hora local — datetime.utcnow() escondia os
+    # horarios das proximas 3h (offset do fuso) no mesmo dia.
+    agora = datetime.now()
     slots = [s for s in candidatos if s not in ocupados and s >= agora]
 
     return templates.TemplateResponse(
@@ -138,7 +147,7 @@ async def agendar_passo_form(
     )
 
 
-@router.post("/reservar")
+@router.post("/reservar", dependencies=[Depends(verificar_csrf)])
 async def reservar(
     request: Request,
     servico_id: int = Form(...),
@@ -220,7 +229,7 @@ async def reservar(
     )
 
 
-@router.post("/comprar")
+@router.post("/comprar", dependencies=[Depends(verificar_csrf)])
 async def comprar(
     request: Request,
     produto_id: int = Form(...),
@@ -256,7 +265,7 @@ async def comprar(
     )
 
 
-@router.post("/pagar")
+@router.post("/pagar", dependencies=[Depends(verificar_csrf)])
 async def pagar(request: Request):
     payload = await request.json()
     external_reference = payload.pop("external_reference", None)

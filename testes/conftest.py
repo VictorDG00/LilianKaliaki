@@ -8,6 +8,7 @@ os.environ.setdefault("MERCADO_PAGO_ACCESS_TOKEN", "test-access-token")
 os.environ.setdefault("MERCADO_PAGO_WEBHOOK_SECRET", "test-webhook-secret")
 os.environ.setdefault("MERCADO_PAGO_PUBLIC_KEY", "test-public-key")
 
+import re
 import subprocess
 
 import pytest
@@ -46,7 +47,16 @@ async def clean_db():
 @pytest_asyncio.fixture
 async def client():
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    # base_url https porque o cookie de sessao e Secure (SESSION_HTTPS_ONLY):
+    # em http:// o httpx guardaria o cookie mas nunca o devolveria, e o CSRF
+    # nunca fecharia. O ASGITransport nao faz TLS de verdade, so muda o scheme.
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
+        # GET / cria a sessao e devolve o token no hx-headers do <body>;
+        # a partir daqui todo POST do teste ja vai com o header, como o HTMX faz.
+        home = await ac.get("/")
+        token = re.search(r'X-CSRF-Token": "([^"]+)"', home.text)
+        if token:
+            ac.headers["X-CSRF-Token"] = token.group(1)
         yield ac
 
 

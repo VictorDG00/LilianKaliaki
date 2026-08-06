@@ -4,6 +4,9 @@
 # O --env-file .env e obrigatorio: o arquivo fica em Infra/ mas o .env de segredos
 # fica na raiz, e o compose por padrao so procura .env na pasta do proprio arquivo.
 # Para dev/testes locais continue usando Infra/docker-compose.yml (nao mexer nesse).
+#
+# A app NAO publica porta no host: quem fala com ela e o container nginx-proxy
+# da VPS, pelo nome do container, dentro da rede externa compartilhada vps-proxy.
 name: liliankaliaki
 
 services:
@@ -26,19 +29,35 @@ services:
     build:
       context: ..
       dockerfile: Infra/Dockerfile
+    container_name: liliankaliaki
     restart: unless-stopped
     env_file: ../.env
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:${DB_PASSWORD}@db:5432/app_db
+      # Disponibilidade/Reserva guardam hora de parede do negocio.
+      TZ: America/Sao_Paulo
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "127.0.0.1:${APP_PORT:-9765}:8000"
-    networks: [internal]
+    expose:
+      - "8000"
+    healthcheck:
+      # a imagem python:3.12-slim nao tem curl nem wget
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    networks: [internal, vps-proxy]
 
 networks:
   internal:
+  vps-proxy:
+    external: true
 
 volumes:
   pgdata:

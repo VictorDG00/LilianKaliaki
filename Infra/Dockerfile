@@ -10,4 +10,7 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# --proxy-headers/--forwarded-allow-ips: a app fica atras do nginx-proxy
+# compartilhado da VPS. Sem isso, request.url_for() gera link http:// e o IP
+# do cliente vira o IP do proxy.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]

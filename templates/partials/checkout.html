@@ -24,7 +24,11 @@
             return new Promise((resolve, reject) => {
               fetch("/pagar", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  // fetch cru nao herda o hx-headers do <body>
+                  "X-CSRF-Token": "{{ csrf_token }}",
+                },
                 body: JSON.stringify({ ...formData, external_reference: "{{ external_reference }}" }),
               })
                 .then((res) => res.json())
