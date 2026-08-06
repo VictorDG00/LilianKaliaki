@@ -137,7 +137,7 @@ Seguem o padrão do `testes/conftest.py`: Postgres real, fixture `client` já co
 O último é o guardrail mais valioso da sprint: qualquer rota de escrita criada por descuido quebra o
 teste e aparece no PR antes de chegar em produção.
 
-## 8. [ ] Esteira CI/CD
+## 8. [x] Esteira CI/CD
 
 Copiar os três templates de `/home/victor/Projetos/vps-infra/ci/templates/` para
 `.github/workflows/`, adaptando só o necessário.
@@ -220,7 +220,7 @@ antes do merge faria:
 **Ordem obrigatória:** mergear `feat/deploy-vps` → `main` e deixar o checkout de produção na `main`
 **antes** de registrar o runner e aplicar os rulesets.
 
-## 9. [ ] Como o código passa a ser puxado sozinho
+## 9. [x] Como o código passa a ser puxado sozinho
 
 ```
 você faz push               →  GitHub

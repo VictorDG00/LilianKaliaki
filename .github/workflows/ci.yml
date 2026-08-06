@@ -1,0 +1,54 @@
+# Testes — rodam no GitHub-hosted. Vira o status check obrigatorio "test".
+name: ci
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+
+    # Postgres real, nao SQLite: a trava de reserva usa SELECT ... FOR UPDATE,
+    # que o SQLite nao implementa de fato — o teste de concorrencia passaria
+    # mesmo com a trava quebrada.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app_db_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/app_db_test
+      SECRET_KEY: test-secret
+      MERCADO_PAGO_ACCESS_TOKEN: test-access-token
+      MERCADO_PAGO_WEBHOOK_SECRET: test-webhook-secret
+      MERCADO_PAGO_PUBLIC_KEY: test-public-key
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # `python -m pytest`, nao `pytest`: sem o -m a raiz do repo nao entra no
+      # sys.path e o conftest estoura ModuleNotFoundError: No module named 'app'.
+      - run: python -m pytest -q

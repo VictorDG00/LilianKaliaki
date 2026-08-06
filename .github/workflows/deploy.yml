@@ -1,0 +1,42 @@
+# Deploy — roda no self-hosted runner da VPS, so em push na main (pos-merge aprovado).
+name: deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-liliankaliaki
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: [self-hosted, vps-prod]
+    env:
+      SRC_DIR: /home/victor/Projetos/Publicado/LilianKaliaki
+      REPO: VictorDG00/LilianKaliaki
+      CONTAINER: liliankaliaki
+      COMPOSE: -f Infra/docker-compose.prod.yml
+    steps:
+      - name: Atualizar código de produção
+        run: |
+          # safe.directory: o runner roda como root e o .git pode ser de outro dono
+          git config --global --add safe.directory "$SRC_DIR"
+          cd "$SRC_DIR"
+          git fetch "https://x-access-token:${{ github.token }}@github.com/${REPO}.git" main
+          git reset --hard FETCH_HEAD
+
+      - name: Rebuild e subir (aguarda ficar healthy)
+        run: |
+          cd "$SRC_DIR"
+          # --env-file .env e OBRIGATORIO: o compose fica em Infra/ e o .env na
+          # raiz. Sem ele ${DB_PASSWORD} vira string vazia com apenas um warning,
+          # e a app sobe sem conseguir autenticar no banco.
+          docker compose --env-file .env $COMPOSE up -d --build --wait --wait-timeout 180
+
+      - name: Logs em caso de falha
+        if: failure()
+        run: |
+          cd "$SRC_DIR"
+          docker compose --env-file .env $COMPOSE logs --tail=80 "$CONTAINER" || true
