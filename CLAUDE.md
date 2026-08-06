@@ -44,9 +44,38 @@ Concorrência: Reservas/Agendamentos críticos devem usar transações explícit
 Expiração de reservas: usar um loop asyncio em background iniciado no startup do FastAPI (não Celery/cron externo), consistente com a regra de "zero filas/workers complexos" acima.
 
 4. Protocolo de Git e Commits (Regras da Casa)
-Commit granular: Toda alteração ou feature funcional concluída DEVE gerar um commit local com mensagem semântica (ex: feat: adiciona fluxo htmx de horarios).
 
-Regra dos 5 Commits: A cada 5 commits locais, é OBRIGATÓRIO executar git push para o repositório remoto para manter o projeto sincronizado para revisão externa.
+> Regra da frota — idêntica nos 5 projetos da VPS. Atualizada em 2026-08-06.
+
+**Todo trabalho começa por um plano.** Levantar o que já existe, decidir a abordagem e só então
+implementar.
+
+Commit granular: toda alteração ou feature funcional concluída DEVE gerar um commit com mensagem
+semântica (ex: `feat: adiciona fluxo htmx de horarios`).
+
+**Ao final de todo plano, sincronizar tudo:**
+```bash
+git add -A && git commit -m "tipo: descrição"
+git push origin main        # push direto — é o fluxo atual
+git push origin main:dev    # mantém a dev alinhada
+```
+
+⚠️ **Commitar ANTES de qualquer push.** Este diretório é o alvo do deploy: todo push na `main`
+dispara o workflow, que faz `git reset --hard FETCH_HEAD` aqui. Qualquer alteração não commitada
+é **destruída** — aconteceu em 06/08/2026 com uma edição deste próprio arquivo.
+
+**Por que push direto na `main`:** nenhuma aplicação da VPS tem cliente hoje, e o gate de aprovação
+humana do fluxo `feature → dev → main` só atrasa o desenvolvimento. Os `bypass_actors` de admin nos
+rulesets são **intencionais**, não descuido.
+
+**A `dev` é mantida em dia de propósito.** Ela não está em uso, mas fica idêntica à `main` para que
+o fluxo com PR volte sem migração no dia em que houver cliente.
+
+**Quando houver cliente:** remover os bypasses dos rulesets e voltar para `feature → dev → main` com
+PR, check `test` verde e 1 aprovação humana. A esteira já está montada — só o bypass precisa sair.
+
+Push na `main` dispara o deploy automático na VPS, que roda `alembic upgrade head` e espera o
+healthcheck de `/healthz` ficar verde.
 
 5. Instruções para a IA durante o Código
 Se a IA precisar criar uma tela nova: Use Jinja2 + HTMX e adicione o model no SQLAdmin. Não crie rotas de CRUD manualmente se o SQLAdmin puder resolver.
