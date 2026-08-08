@@ -1,8 +1,9 @@
 # Telas de gestão do SQLAdmin (CRM, Reservas, Serviços)
 
-from sqladmin import ModelView, Admin
+from sqladmin import ModelView, Admin, BaseView, expose
 from sqladmin.authentication import AuthenticationBackend
 from starlette.requests import Request
+from wtforms import SelectField
 
 from datetime import datetime
 
@@ -29,8 +30,38 @@ class AdminAuth(AuthenticationBackend):
     async def authenticate(self, request: Request) -> bool:
         return bool(request.session.get("autenticado"))
 
+# Tempo de atendimento oferecido. A coluna continua sendo minutos (int) — isto
+# aqui e so a forma de escolher, para nao existir servico de 47 minutos.
+DURACOES = [(30, "00:30"), (60, "01:00"), (90, "01:30"), (120, "02:00")]
+
+
+def hhmm(minutos: int | None) -> str:
+    """90 -> '01:30'."""
+    if minutos is None:
+        return ""
+    return f"{minutos // 60:02d}:{minutos % 60:02d}"
+
+
 class ServicoAdmin(ModelView, model=Servico):
     column_list = [Servico.titulo, Servico.duracao_min, Servico.preco, Servico.ativo]
+    column_labels = {Servico.duracao_min: "Tempo do serviço"}
+    column_formatters = {Servico.duracao_min: lambda m, a: hhmm(m.duracao_min)}
+    form_overrides = {"duracao_min": SelectField}
+    form_args = {"duracao_min": {"choices": DURACOES, "coerce": int, "label": "Tempo do serviço"}}
+
+    async def scaffold_form(self, rules=None):
+        """Duracao fora do padrao (cadastrada antes desta tela) entra na lista.
+
+        Sem isto, abrir um servico de 45 min para mexer no preco salvaria ele
+        como 30 min sem ninguem perceber.
+        """
+        form = await super().scaffold_form(rules)
+        async with SessionLocal() as s:
+            existentes = set((await s.execute(select(Servico.duracao_min))).scalars().all())
+        extras = sorted(existentes - {m for m, _ in DURACOES})
+        if extras:
+            form.duracao_min.kwargs["choices"] = DURACOES + [(m, hhmm(m)) for m in extras]
+        return form
 
 class DisponibilidadeAdmin(ModelView, model=Disponibilidade):
     column_list = [Disponibilidade.dia_semana, Disponibilidade.hora_inicio, Disponibilidade.hora_fim]
@@ -62,6 +93,18 @@ class PostAdmin(ModelView, model=Post):
             data["publicado_em"] = datetime.utcnow()
 
 
+class CursosView(BaseView):
+    """Placeholder. Vira ModelView quando existir a tabela de curso."""
+
+    name = "Cursos"
+    identity = "cursos"
+    icon = "fa-solid fa-graduation-cap"
+
+    @expose("/cursos", identity="cursos")
+    async def pagina(self, request: Request):
+        return await self.templates.TemplateResponse(request, "admin/cursos.html")
+
+
 def setup_admin(app, engine) -> Admin:
     admin = Admin(app, engine, authentication_backend=AdminAuth(secret_key=settings.SECRET_KEY))
     admin.add_view(ServicoAdmin)
@@ -70,5 +113,7 @@ def setup_admin(app, engine) -> Admin:
     admin.add_view(ReservaAdmin)
     admin.add_view(ProdutoAdmin)
     admin.add_view(PedidoAdmin)
+    # ordem do menu lateral: Cursos entra logo depois de Pedidos
+    admin.add_base_view(CursosView)
     admin.add_view(PostAdmin)
     return admin

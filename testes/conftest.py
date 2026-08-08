@@ -7,9 +7,12 @@ os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("MERCADO_PAGO_ACCESS_TOKEN", "test-access-token")
 os.environ.setdefault("MERCADO_PAGO_WEBHOOK_SECRET", "test-webhook-secret")
 os.environ.setdefault("MERCADO_PAGO_PUBLIC_KEY", "test-public-key")
+os.environ.setdefault("ADMIN_USERNAME", "admin")
+os.environ.setdefault("ADMIN_PASSWORD", "admin-secreto")
 
 import re
 import subprocess
+import sys
 
 import pytest
 import pytest_asyncio
@@ -24,8 +27,10 @@ TEST_DATABASE_URL = os.environ["DATABASE_URL"]
 
 @pytest.fixture(scope="session", autouse=True)
 def apply_migrations():
+    # sys.executable -m: funciona com o venv nao ativado (o binario `alembic` so
+    # entra no PATH depois do activate; o interpretador atual sempre serve).
     subprocess.run(
-        ["alembic", "upgrade", "head"],
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
         env={**os.environ, "DATABASE_URL": TEST_DATABASE_URL},
         check=True,
     )
