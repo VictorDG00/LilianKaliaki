@@ -19,6 +19,12 @@ ROUTERS_DO_APP = (routes_public.router, routes_webhook.router)
 
 # Guardrail 1: as unicas rotas de escrita do app. Qualquer POST/PUT/PATCH/DELETE
 # novo tem que ser adicionado aqui CONSCIENTEMENTE, num PR que explique por que.
+#
+# Escopo: rotas publicas. As telas do admin (fotos, horarios, acoes de reserva)
+# vivem num sub-app montado pelo SQLAdmin e nao aparecem aqui — quem protege
+# elas e o AdminAuth mais o cookie same_site=lax, que nao viaja em POST
+# cross-site. Se um dia o admin ganhar rota que mexa em dinheiro, ela precisa
+# de guardrail proprio.
 ROTAS_DE_ESCRITA_CONHECIDAS = {
     ("/reservar", "POST"),
     ("/comprar", "POST"),

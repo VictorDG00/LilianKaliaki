@@ -5,7 +5,11 @@ Este projeto possui escolhas de arquitetura e tecnologia FIXAS E INEGOCIÁVEIS. 
 1. Stack Tecnológica Inegociável (Stack Lock)
 Backend: FastAPI + SQLModel (SQLAlchemy Async).
 
-Painel Admin: SQLAdmin (Zero criação de painel administrativo customizado)
+Painel Admin: SQLAdmin. **Emenda de 08/08/2026:** continua proibido painel paralelo (nada de
+`/painel` próprio, segundo login, CRUD duplicado), mas **é permitido customizar por dentro** —
+`list_template`/`edit_template` sobrescritos e `BaseView` com `@expose`. Foi assim que nasceram a
+dashboard de reservas em cards, a tela de horários e a galeria de fotos: uma tela só, o login e a
+paginação do SQLAdmin
 
 Front-end público: Jinja2 Templates + HTMX (Proibido uso de frameworks SPA como React, Vue, Next.js ou build tools como Vite/Webpack).
 
@@ -116,3 +120,26 @@ Passo a passo completo em `step-by-step.md`. Resumo do que existe: `Infra/Docker
 - Roda-se sempre a partir da raiz do repo, com `--env-file .env -f Infra/docker-compose.prod.yml` — o compose fica em `Infra/` mas o `.env` de segredos fica na raiz, e por padrão o Compose só procura `.env` na pasta do próprio arquivo de compose. Esquecer o `--env-file .env` faz `${DB_PASSWORD}` resolver pra string vazia silenciosamente (só um warning), não erro.
 - `DB_PASSWORD` e `APP_PORT` foram adicionadas ao `Settings` (`app/config.py`)/`.env`/`.env.exemple` só por causa disso — não é usada por nenhuma lógica Python, existe apenas para o `pydantic-settings` não quebrar com `extra_forbidden` quando essas chaves aparecem no `.env` (comportamento padrão da lib é rejeitar env vars não declaradas como campo).
 - Testado localmente na Codespace (build + up + curl 200 + down) antes de considerar pronto; a suíte `pytest` (fluxo de dev via `Infra/docker-compose.yml`) segue passando sem alteração.
+
+## 9. Painel admin (reformulado em 08/08/2026)
+
+Tudo dentro do SQLAdmin, via template sobrescrito e `BaseView` — ver a emenda no item 1.
+
+- **Reservas** (`/admin/reserva/list`): cards em vez de tabela, com abas Próximos / Pendente /
+  Anteriores / Cancelados (`list_query`+`count_query` lendo `?aba=`), busca por cliente ou serviço
+  (`search_query` com join), badge por status, drawer de detalhes por HTMX e ações Confirmar/Cancelar.
+  **Confirmar na mão grava `logger.warning`** — fora do webhook do Mercado Pago não existe "pago",
+  e é esse log que separa venda paga de cortesia.
+- **Horários** (`/admin/horarios`): semana recorrente com liga/desliga por dia (`Disponibilidade.ativo`
+  — desligar não apaga o horário) e ausências (tabela `Ausencia`, sempre dia inteiro). A hierarquia de
+  cálculo mora em `app/agenda.py`, não na rota: ausência → dia ativo → fatia pela duração → desconta
+  reservas → descarta passado.
+- **Fotos**: até 4 por serviço/produto, sempre reconvertidas para WebP por `app/fotos.py`. A validação
+  real é o Pillow conseguir abrir o arquivo — content-type e extensão vêm do navegador.
+  **Dependem do volume `media` do `docker-compose.prod.yml`**: sem ele, todo deploy com `--build`
+  apaga o que foi enviado.
+- **Serviço**: `duracao_min` continua int em minutos; o form oferece 00:30/01:00/01:30/02:00 e o
+  `scaffold_form` acrescenta a duração legada, se houver, para não regravar 45 min como 30.
+- Rotas de escrita do admin **não** entram em `ROTAS_DE_ESCRITA_CONHECIDAS` (o guardrail varre os
+  routers do app, e o SQLAdmin é um sub-app montado). Elas ficam atrás do `AdminAuth`, e o cookie de
+  sessão é `same_site="lax"` — POST cross-site não leva cookie.

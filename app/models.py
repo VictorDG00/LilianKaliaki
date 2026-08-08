@@ -77,6 +77,10 @@ class Reserva(SQLModel, table=True):
     expira_em: datetime
     mp_payment_id: Optional[str] = None
     criado_em: datetime = Field(default_factory=datetime.utcnow)
+    # lazy=selectin: a listagem do painel le servico.titulo e contato.nome fora
+    # da sessao que carregou a reserva — sem isso, MissingGreenlet no async.
+    servico: Optional["Servico"] = Relationship(sa_relationship_kwargs={"lazy": "selectin"})
+    contato: Optional["Contato"] = Relationship(sa_relationship_kwargs={"lazy": "selectin"})
 
 
 class Produto(SQLModel, table=True):

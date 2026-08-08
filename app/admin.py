@@ -1,14 +1,17 @@
 # Telas de gestão do SQLAdmin (CRM, Reservas, Serviços)
 
-from sqladmin import ModelView, Admin, BaseView, expose
+import logging
+
+from sqladmin import ModelView, Admin, BaseView, action, expose
 from sqladmin.authentication import AuthenticationBackend
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
+from starlette.responses import RedirectResponse
 from wtforms import SelectField
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import and_ as sa_and, or_ as sa_or, select
 
 from app.agenda import DIAS_DA_SEMANA, erro_nos_intervalos
 from app.config import settings
@@ -18,6 +21,7 @@ from app.models import (
     MAX_FOTOS,
     Ausencia,
     Contato,
+    StatusReserva,
     Disponibilidade,
     Foto,
     Pedido,
@@ -27,6 +31,16 @@ from app.models import (
     Servico,
 )
 from app.slug import slug_unico
+
+logger = logging.getLogger(__name__)
+
+# As abas da tela de reservas. Cada uma e um recorte de status + tempo.
+ABAS_DE_RESERVA = {
+    "proximos": "Próximos",
+    "pendente": "Pendente",
+    "anteriores": "Anteriores",
+    "cancelados": "Cancelados",
+}
 
 
 class AdminAuth(AuthenticationBackend):
@@ -88,7 +102,92 @@ class ContatoAdmin(ModelView, model=Contato):
     column_list = [Contato.nome, Contato.email, Contato.telefone, Contato.consentimento_marketing, Contato.criado_em]
 
 class ReservaAdmin(ModelView, model=Reserva):
-    column_list = [Reserva.servico_id, Reserva.contato_id, Reserva.data_hora, Reserva.status, Reserva.expira_em]
+    """Agenda do dia a dia. A tela e um template proprio (cards), mas o resto —
+    login, paginacao, edicao, exclusao — continua sendo o SQLAdmin."""
+
+    name = "Reserva"
+    name_plural = "Reservas"
+    column_list = [Reserva.data_hora, Reserva.status]
+    list_template = "admin/reserva_list.html"
+    page_size = 25
+    page_size_options = [10, 25, 50, 100]
+    # precisa ser nao-vazio para a caixa de busca aparecer; quem manda de fato
+    # e o search_query abaixo, que procura no cliente e no servico
+    column_searchable_list = [Reserva.status]
+    column_default_sort = ("data_hora", True)
+
+    ABAS = ABAS_DE_RESERVA
+
+    def aba_atual(self, request: Request) -> str:
+        aba = request.query_params.get("aba", "proximos")
+        return aba if aba in ABAS_DE_RESERVA else "proximos"
+
+    def _filtro_da_aba(self, request: Request):
+        """Cada aba e um recorte de status + tempo. `agora` e hora local porque
+        data_hora guarda hora de parede do negocio."""
+        agora = datetime.now()
+        aba = self.aba_atual(request)
+        if aba == "pendente":
+            return Reserva.status == StatusReserva.PENDENTE
+        if aba == "cancelados":
+            return Reserva.status.in_((StatusReserva.CANCELADA, StatusReserva.EXPIRADA))
+        if aba == "anteriores":
+            return sa_and(
+                Reserva.data_hora < agora,
+                Reserva.status.notin_((StatusReserva.CANCELADA, StatusReserva.EXPIRADA)),
+            )
+        return sa_and(Reserva.data_hora >= agora, Reserva.status == StatusReserva.CONFIRMADA)
+
+    def list_query(self, request: Request):
+        return super().list_query(request).where(self._filtro_da_aba(request))
+
+    def count_query(self, request: Request):
+        return super().count_query(request).where(self._filtro_da_aba(request))
+
+    def search_query(self, stmt, term: str):
+        """Busca por nome/e-mail do cliente ou titulo do servico — ninguem
+        procura reserva pelo id do contato."""
+        curinga = f"%{term}%"
+        return (
+            stmt.join(Contato, Reserva.contato_id == Contato.id)
+            .join(Servico, Reserva.servico_id == Servico.id)
+            .where(
+                sa_or(
+                    Contato.nome.ilike(curinga),
+                    Contato.email.ilike(curinga),
+                    Servico.titulo.ilike(curinga),
+                )
+            )
+        )
+
+    async def _mudar_status(self, request: Request, novo: StatusReserva, motivo: str):
+        pks = request.query_params.get("pks", "").split(",")
+        async with SessionLocal() as s:
+            for pk in [p for p in pks if p.isdigit()]:
+                reserva = await s.get(Reserva, int(pk))
+                if reserva is None:
+                    continue
+                reserva.status = novo
+                s.add(reserva)
+                logger.warning("Reserva %s: %s pelo painel", reserva.id, motivo)
+            await s.commit()
+        return RedirectResponse(request.headers.get("referer") or "/admin/reserva/list", status_code=302)
+
+    @action(
+        name="confirmar",
+        label="Confirmar",
+        confirmation_message="Confirmar sem pagamento pelo site? Use para quem pagou presencial.",
+    )
+    async def confirmar(self, request: Request):
+        # Fora do webhook do Mercado Pago nao existe "pago" — por isso isto vai
+        # para o log com aviso, e da para separar venda paga de cortesia.
+        return await self._mudar_status(
+            request, StatusReserva.CONFIRMADA, "confirmada na mao, sem pagamento MP"
+        )
+
+    @action(name="cancelar", label="Cancelar", confirmation_message="Cancelar esta reserva?")
+    async def cancelar(self, request: Request):
+        return await self._mudar_status(request, StatusReserva.CANCELADA, "cancelada")
 
 class ProdutoAdmin(ModelView, model=Produto):
     column_list = [Produto.titulo, Produto.preco, Produto.ativo]
@@ -312,6 +411,58 @@ class DisponibilidadeView(BaseView):
         return await self._tela(request)
 
 
+MESES = (
+    "jan", "fev", "mar", "abr", "mai", "jun",
+    "jul", "ago", "set", "out", "nov", "dez",
+)
+DIAS_CURTOS = ("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom")
+
+
+def data_longa(quando: datetime) -> str:
+    """'Sáb, 08 de ago'. Por tupla, e nao por locale: a imagem python:3.12-slim
+    nao tem pt_BR instalado."""
+    return f"{DIAS_CURTOS[quando.weekday()]}, {quando.day:02d} de {MESES[quando.month - 1]}"
+
+
+def horario_fim(reserva: Reserva) -> str:
+    """Fim do atendimento, para o card mostrar '13:00 - 14:00'."""
+    if reserva.servico is None:
+        return ""
+    return (reserva.data_hora + timedelta(minutes=reserva.servico.duracao_min)).strftime("%H:%M")
+
+
+def so_digitos(telefone: str | None) -> str:
+    return "".join(c for c in (telefone or "") if c.isdigit())
+
+
+def expira_em(quando: datetime | None) -> str:
+    """expira_em e gravado em UTC (datetime.utcnow no /reservar)."""
+    if quando is None:
+        return ""
+    faltam = int((quando - datetime.utcnow()).total_seconds() // 60)
+    return f"expira em {faltam} min" if faltam > 0 else "expirada"
+
+
+class ReservaDetalheView(BaseView):
+    """Conteudo do drawer da tela de reservas. Fora do menu."""
+
+    name = "Detalhe da reserva"
+    identity = "reserva-detalhe"
+
+    def is_visible(self, request: Request) -> bool:
+        return False
+
+    @expose("/reserva-detalhe/{reserva_id}", methods=["GET"], identity="reserva-detalhe")
+    async def detalhe(self, request: Request):
+        async with SessionLocal() as s:
+            reserva = await s.get(Reserva, int(request.path_params["reserva_id"]))
+            if reserva is None:
+                raise HTTPException(status_code=404)
+            return await self.templates.TemplateResponse(
+                request, "admin/reserva_detalhe.html", {"reserva": reserva}
+            )
+
+
 class CursosView(BaseView):
     """Placeholder. Vira ModelView quando existir a tabela de curso."""
 
@@ -326,6 +477,9 @@ class CursosView(BaseView):
 
 def setup_admin(app, engine) -> Admin:
     admin = Admin(app, engine, authentication_backend=AdminAuth(secret_key=settings.SECRET_KEY))
+    admin.templates.env.filters.update(
+        data_longa=data_longa, horario_fim=horario_fim, so_digitos=so_digitos, expira_em=expira_em
+    )
     admin.add_view(ServicoAdmin)
     admin.add_view(ContatoAdmin)
     admin.add_view(ReservaAdmin)
@@ -333,6 +487,7 @@ def setup_admin(app, engine) -> Admin:
     admin.add_view(PedidoAdmin)
     # ordem do menu lateral: Cursos entra logo depois de Pedidos
     admin.add_base_view(DisponibilidadeView)
+    admin.add_base_view(ReservaDetalheView)
     admin.add_base_view(FotosView)
     admin.add_base_view(CursosView)
     admin.add_view(PostAdmin)

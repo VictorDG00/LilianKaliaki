@@ -1,0 +1,139 @@
+{% extends "sqladmin/layout.html" %}
+
+{% macro badge(status) %}
+  {% if status.value == "Confirmada" %}<span class="badge bg-green">Confirmada</span>
+  {% elif status.value == "Pendente" %}<span class="badge bg-orange">Pendente</span>
+  {% elif status.value == "Cancelada" %}<span class="badge bg-red">Cancelada</span>
+  {% else %}<span class="badge bg-secondary">{{ status.value }}</span>{% endif %}
+{% endmacro %}
+
+{% block content %}
+{% set abas = model_view.ABAS %}
+{% set aba_atual = model_view.aba_atual(request) %}
+<div class="col-12">
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Reservas</h3>
+    </div>
+
+    {# ---------- Abas ---------- #}
+    <div class="card-body border-bottom py-3">
+      <ul class="nav nav-tabs mb-3">
+        {% for chave, rotulo in abas.items() %}
+        <li class="nav-item">
+          <a class="nav-link {% if chave == aba_atual %}active{% endif %}"
+             href="{{ request.url.remove_query_params('page').include_query_params(aba=chave) }}">
+            {{ rotulo }}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+
+      <form method="GET" class="d-flex gap-2">
+        <input type="hidden" name="aba" value="{{ aba_atual }}">
+        <input type="search" name="search" class="form-control" placeholder="Buscar por cliente ou serviço"
+               value="{{ request.query_params.get('search', '') }}">
+        <button class="btn btn-primary" type="submit">Buscar</button>
+      </form>
+    </div>
+
+    {# ---------- Cards ---------- #}
+    <div class="card-body">
+      {% for reserva in pagination.rows %}
+      <div class="row align-items-center border-bottom py-3">
+        <div class="col-md-3">
+          <div class="fw-bold">{{ reserva.data_hora | data_longa }}</div>
+          <div class="text-secondary">
+            {{ reserva.data_hora.strftime('%H:%M') }}
+            {% if reserva.servico %}– {{ reserva | horario_fim }}{% endif %}
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <div class="fw-bold">{{ reserva.servico.titulo if reserva.servico else "—" }}</div>
+          <div>
+            {{ reserva.contato.nome if reserva.contato else "—" }}
+            {% if reserva.contato %}
+            <a class="ms-2" href="https://wa.me/55{{ reserva.contato.telefone | so_digitos }}" target="_blank"
+               rel="noopener" title="WhatsApp">WhatsApp</a>
+            <a class="ms-2" href="mailto:{{ reserva.contato.email }}">e-mail</a>
+            {% endif %}
+          </div>
+          <div class="mt-1">
+            {{ badge(reserva.status) }}
+            {% if aba_atual == "pendente" and reserva.expira_em %}
+            <small class="text-secondary ms-2">{{ reserva.expira_em | expira_em }}</small>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="col-md-3 text-end">
+          <div class="dropdown">
+            <button class="btn btn-sm dropdown-toggle" data-bs-toggle="dropdown">···</button>
+            <div class="dropdown-menu dropdown-menu-end">
+              <a class="dropdown-item" href="#" hx-get="/admin/reserva-detalhe/{{ reserva.id }}"
+                 hx-target="#drawer-conteudo" hx-swap="innerHTML" onclick="abrirDrawer()">Ver detalhes</a>
+              <a class="dropdown-item"
+                 href="{{ url_for('admin:edit', identity='reserva', pk=reserva.id) }}">Reagendar / editar</a>
+              {% if reserva.status.value != "Confirmada" %}
+              <a class="dropdown-item"
+                 href="{{ model_view._url_for_action(request, 'confirmar') }}?pks={{ reserva.id }}">Confirmar</a>
+              {% endif %}
+              {% if reserva.status.value != "Cancelada" %}
+              <a class="dropdown-item text-danger"
+                 href="{{ model_view._url_for_action(request, 'cancelar') }}?pks={{ reserva.id }}">Cancelar</a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-secondary py-4 mb-0">Nada nesta aba.</p>
+      {% endfor %}
+    </div>
+
+    {# ---------- Paginação (a do próprio SQLAdmin) ---------- #}
+    <div class="card-footer d-flex align-items-center justify-content-between">
+      <ul class="pagination m-0">
+        <li class="page-item {% if not pagination.has_previous %}disabled{% endif %}">
+          <a class="page-link" href="{{ pagination.previous_page.url if pagination.has_previous else '#' }}">anterior</a>
+        </li>
+        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+          <a class="page-link" href="{{ pagination.next_page.url if pagination.has_next else '#' }}">próxima</a>
+        </li>
+      </ul>
+      <div class="dropdown text-muted">
+        Mostrar
+        <a href="#" class="btn btn-sm btn-light dropdown-toggle" data-bs-toggle="dropdown">
+          {{ request.query_params.get("pageSize") or model_view.page_size }} / página
+        </a>
+        <div class="dropdown-menu">
+          {% for tamanho in model_view.page_size_options %}
+          <a class="dropdown-item"
+             href="{{ request.url.include_query_params(pageSize=tamanho, page=pagination.resize(tamanho).page) }}">
+            {{ tamanho }} / página
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ---------- Drawer de detalhes ---------- #}
+<div id="drawer" class="offcanvas offcanvas-end" tabindex="-1">
+  <div class="offcanvas-header">
+    <h3 class="offcanvas-title">Detalhes da reserva</h3>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body" id="drawer-conteudo"></div>
+</div>
+
+<script src="https://unpkg.com/htmx.org@2.0.3"></script>
+<script>
+  function abrirDrawer() {
+    // o Tabler (base do SQLAdmin) ja traz o offcanvas do Bootstrap
+    bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('drawer')).show();
+  }
+</script>
+{% endblock %}

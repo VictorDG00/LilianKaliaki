@@ -1,0 +1,37 @@
+{# Conteudo do drawer. So leitura — quem muda status sao as acoes do card. #}
+<dl>
+  <dt>Quando</dt>
+  <dd>
+    {{ reserva.data_hora | data_longa }} · {{ reserva.data_hora.strftime('%H:%M') }}
+    {% if reserva.servico %}– {{ reserva | horario_fim }}{% endif %}
+  </dd>
+
+  <dt>Serviço</dt>
+  <dd>
+    {{ reserva.servico.titulo if reserva.servico else "—" }}
+    {% if reserva.servico %}<br><span class="text-secondary">R$ {{ "%.2f"|format(reserva.servico.preco) }}</span>{% endif %}
+  </dd>
+
+  <dt>Cliente</dt>
+  <dd>
+    {% if reserva.contato %}
+    {{ reserva.contato.nome }}<br>
+    <a href="mailto:{{ reserva.contato.email }}">{{ reserva.contato.email }}</a><br>
+    <a href="https://wa.me/55{{ reserva.contato.telefone | so_digitos }}" target="_blank" rel="noopener">
+      {{ reserva.contato.telefone }}
+    </a>
+    {% else %}—{% endif %}
+  </dd>
+
+  <dt>Status</dt>
+  <dd>{{ reserva.status.value }}</dd>
+
+  <dt>Pagamento</dt>
+  <dd>{{ reserva.mp_payment_id or "sem pagamento pelo site" }}</dd>
+
+  <dt>Criada em</dt>
+  <dd>{{ reserva.criado_em.strftime('%d/%m/%Y %H:%M') }} (UTC)</dd>
+
+  <dt>Expira em</dt>
+  <dd>{{ reserva.expira_em.strftime('%d/%m/%Y %H:%M') if reserva.expira_em else "—" }} (UTC)</dd>
+</dl>
