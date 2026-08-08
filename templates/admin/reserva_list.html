@@ -71,8 +71,7 @@
           <div class="dropdown">
             <button class="btn btn-sm dropdown-toggle" data-bs-toggle="dropdown">···</button>
             <div class="dropdown-menu dropdown-menu-end">
-              <a class="dropdown-item" href="#" hx-get="/admin/reserva-detalhe/{{ reserva.id }}"
-                 hx-target="#drawer-conteudo" hx-swap="innerHTML" onclick="abrirDrawer()">Ver detalhes</a>
+              <a class="dropdown-item" href="/admin/reserva-detalhe/{{ reserva.id }}">Ver detalhes</a>
               <a class="dropdown-item"
                  href="{{ url_for('admin:edit', identity='reserva', pk=reserva.id) }}">Reagendar / editar</a>
               {% if reserva.status.value != "Confirmada" %}
@@ -120,20 +119,4 @@
   </div>
 </div>
 
-{# ---------- Drawer de detalhes ---------- #}
-<div id="drawer" class="offcanvas offcanvas-end" tabindex="-1">
-  <div class="offcanvas-header">
-    <h3 class="offcanvas-title">Detalhes da reserva</h3>
-    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
-  </div>
-  <div class="offcanvas-body" id="drawer-conteudo"></div>
-</div>
-
-<script src="https://unpkg.com/htmx.org@2.0.3"></script>
-<script>
-  function abrirDrawer() {
-    // o Tabler (base do SQLAdmin) ja traz o offcanvas do Bootstrap
-    bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('drawer')).show();
-  }
-</script>
 {% endblock %}

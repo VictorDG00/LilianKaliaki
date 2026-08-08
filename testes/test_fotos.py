@@ -42,9 +42,12 @@ async def test_upload_converte_para_webp_e_redimensiona(admin, session):  # noqa
     resposta = await admin.post(
         f"/admin/fotos/servico/{servico.id}/upload",
         files={"foto": ("foto.png", _png(), "image/png")},
+        follow_redirects=False,
     )
 
-    assert resposta.status_code == 200
+    # upload responde redirect para a tela de edicao (sem JS no meio)
+    assert resposta.status_code == 302
+    assert resposta.headers["location"] == f"/admin/servico/edit/{servico.id}"
     foto = (await session.exec(select(Foto))).one()
     assert foto.arquivo.endswith(".webp")
     assert foto.servico_id == servico.id and foto.produto_id is None
@@ -61,9 +64,10 @@ async def test_arquivo_que_nao_e_imagem_e_recusado(admin, session):  # noqa: F81
     resposta = await admin.post(
         f"/admin/fotos/servico/{servico.id}/upload",
         files={"foto": ("virus.jpg", io.BytesIO(b"<?php echo 1; ?>"), "image/jpeg")},
+        follow_redirects=False,
     )
 
-    assert "não é uma imagem válida" in resposta.text
+    assert "n%C3%A3o%20%C3%A9%20uma%20imagem%20v%C3%A1lida" in resposta.headers["location"]
     assert (await session.exec(select(Foto))).all() == []
 
 
@@ -78,9 +82,10 @@ async def test_limite_de_quatro_fotos(admin, session):  # noqa: F811
     quinta = await admin.post(
         f"/admin/fotos/servico/{servico.id}/upload",
         files={"foto": ("foto.png", _png(tamanho=(50, 50)), "image/png")},
+        follow_redirects=False,
     )
 
-    assert "Máximo de 4 fotos" in quinta.text
+    assert "M%C3%A1ximo%20de%204%20fotos" in quinta.headers["location"]
     assert len((await session.exec(select(Foto))).all()) == 4
 
 
@@ -110,3 +115,30 @@ async def test_upload_exige_login(client, session):
 
     assert resposta.status_code in (302, 303)
     assert (await session.exec(select(Foto))).all() == []
+
+
+async def test_tela_de_edicao_mostra_a_galeria_sem_javascript(admin, session):  # noqa: F811
+    """A galeria vem no HTML da propria pagina: nada de CDN externa nem de
+    'Carregando fotos…' eterno se o htmx nao carregar."""
+    servico = await _seed_servico(session)
+    await admin.post(
+        f"/admin/fotos/servico/{servico.id}/upload",
+        files={"foto": ("foto.png", _png(tamanho=(50, 50)), "image/png")},
+    )
+    foto = (await session.exec(select(Foto))).one()
+
+    pagina = await admin.get(f"/admin/servico/edit/{servico.id}")
+
+    assert f'src="/media/{foto.arquivo}"' in pagina.text
+    assert "Enviar foto" in pagina.text
+    assert "unpkg.com" not in pagina.text
+
+
+async def test_form_nao_tem_campo_de_texto_para_fotos(admin, session):  # noqa: F811
+    """O relacionamento nao pode virar campo do formulario — era um input de
+    texto inutil chamado 'Fotos' no topo da tela."""
+    servico = await _seed_servico(session)
+
+    for tela in (f"/admin/servico/edit/{servico.id}", "/admin/produto/create"):
+        corpo = (await admin.get(tela)).text
+        assert 'name="fotos"' not in corpo, tela

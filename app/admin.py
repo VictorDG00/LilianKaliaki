@@ -1,6 +1,7 @@
 # Telas de gestão do SQLAdmin (CRM, Reservas, Serviços)
 
 import logging
+from urllib.parse import quote
 
 from sqladmin import ModelView, Admin, BaseView, action, expose
 from sqladmin.authentication import AuthenticationBackend
@@ -76,6 +77,9 @@ class ServicoAdmin(ModelView, model=Servico):
     column_formatters = {Servico.duracao_min: lambda m, a: hhmm(m.duracao_min)}
     form_overrides = {"duracao_min": SelectField}
     form_args = {"duracao_min": {"choices": DURACOES, "coerce": int, "label": "Tempo do serviço"}}
+    # `fotos` e relacionamento: sem excluir, o SQLAdmin desenha um campo de
+    # texto inutil chamado "Fotos" no topo do form. Quem edita foto e a galeria.
+    form_excluded_columns = ["fotos"]
     # o bloco de fotos so existe na edicao: antes de salvar nao ha id para
     # pendurar o arquivo
     edit_template = "admin/edit_com_fotos.html"
@@ -191,6 +195,7 @@ class ReservaAdmin(ModelView, model=Reserva):
 
 class ProdutoAdmin(ModelView, model=Produto):
     column_list = [Produto.titulo, Produto.preco, Produto.ativo]
+    form_excluded_columns = ["fotos"]
     edit_template = "admin/edit_com_fotos.html"
 
     async def on_model_delete(self, model, request):
@@ -234,28 +239,14 @@ class FotosView(BaseView):
             raise HTTPException(status_code=404)
         return dono, int(request.path_params["item_id"])
 
-    async def _galeria(self, request: Request, erro: str | None = None):
-        dono, item_id = self._dono(request)
-        async with SessionLocal() as s:
-            coluna = Foto.servico_id if dono == "servico" else Foto.produto_id
-            fotos = (
-                await s.execute(select(Foto).where(coluna == item_id).order_by(Foto.ordem))
-            ).scalars().all()
-        return await self.templates.TemplateResponse(
-            request,
-            "admin/fotos.html",
-            {
-                "fotos": fotos,
-                "dono": dono,
-                "item_id": item_id,
-                "max_fotos": MAX_FOTOS,
-                "erro": erro,
-            },
-        )
-
-    @expose("/fotos/{dono}/{item_id}", methods=["GET"], identity="fotos")
-    async def galeria(self, request: Request):
-        return await self._galeria(request)
+    @staticmethod
+    def _de_volta(dono: str, item_id: int, erro: str | None = None):
+        """Volta para a tela de edicao do dono. Sem JS no meio: upload no admin
+        e formulario e redirect, como o resto do SQLAdmin."""
+        destino = f"/admin/{dono}/edit/{item_id}"
+        if erro:
+            destino += f"?erro_foto={quote(erro)}"
+        return RedirectResponse(destino, status_code=302)
 
     @expose("/fotos/{dono}/{item_id}/upload", methods=["POST"], identity="fotos_upload")
     async def upload(self, request: Request):
@@ -263,7 +254,7 @@ class FotosView(BaseView):
         form = await request.form()
         arquivo = form.get("foto")
         if arquivo is None or not getattr(arquivo, "filename", ""):
-            return await self._galeria(request, "Escolha um arquivo.")
+            return self._de_volta(dono, item_id, "Escolha um arquivo.")
 
         async with SessionLocal() as s:
             coluna = Foto.servico_id if dono == "servico" else Foto.produto_id
@@ -271,17 +262,17 @@ class FotosView(BaseView):
                 await s.execute(select(Foto).where(coluna == item_id).order_by(Foto.ordem))
             ).scalars().all()
             if len(atuais) >= MAX_FOTOS:
-                return await self._galeria(request, f"Máximo de {MAX_FOTOS} fotos.")
+                return self._de_volta(dono, item_id, f"Máximo de {MAX_FOTOS} fotos.")
             try:
                 caminho = await salvar_foto(arquivo, f"{dono}/{item_id}")
             except FotoInvalida as e:
-                return await self._galeria(request, str(e))
+                return self._de_volta(dono, item_id, str(e))
 
             foto = Foto(arquivo=caminho, ordem=len(atuais))
             setattr(foto, f"{dono}_id", item_id)
             s.add(foto)
             await s.commit()
-        return await self._galeria(request)
+        return self._de_volta(dono, item_id)
 
     @expose("/fotos/{dono}/{item_id}/remover/{foto_id}", methods=["POST"], identity="fotos_remover")
     async def remover(self, request: Request):
@@ -292,7 +283,7 @@ class FotosView(BaseView):
                 remover_arquivo(foto.arquivo)
                 await s.delete(foto)
                 await s.commit()
-        return await self._galeria(request)
+        return self._de_volta(dono, item_id)
 
 
 class DisponibilidadeView(BaseView):
@@ -463,6 +454,19 @@ class ReservaDetalheView(BaseView):
             )
 
 
+async def fotos_do_item(dono: str, item_id: int) -> list[Foto]:
+    """Fotos de um servico/produto, para a tela de edicao renderizar direto.
+
+    Vive como global do Jinja porque o ambiente de template do SQLAdmin e
+    async — assim a galeria chega junto com a pagina, sem depender de JS.
+    """
+    async with SessionLocal() as s:
+        coluna = Foto.servico_id if dono == "servico" else Foto.produto_id
+        return (
+            await s.execute(select(Foto).where(coluna == item_id).order_by(Foto.ordem))
+        ).scalars().all()
+
+
 class CursosView(BaseView):
     """Placeholder. Vira ModelView quando existir a tabela de curso."""
 
@@ -477,6 +481,8 @@ class CursosView(BaseView):
 
 def setup_admin(app, engine) -> Admin:
     admin = Admin(app, engine, authentication_backend=AdminAuth(secret_key=settings.SECRET_KEY))
+    admin.templates.env.globals["fotos_do_item"] = fotos_do_item
+    admin.templates.env.globals["MAX_FOTOS"] = MAX_FOTOS
     admin.templates.env.filters.update(
         data_longa=data_longa, horario_fim=horario_fim, so_digitos=so_digitos, expira_em=expira_em
     )

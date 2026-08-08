@@ -127,7 +127,7 @@ Tudo dentro do SQLAdmin, via template sobrescrito e `BaseView` — ver a emenda 
 
 - **Reservas** (`/admin/reserva/list`): cards em vez de tabela, com abas Próximos / Pendente /
   Anteriores / Cancelados (`list_query`+`count_query` lendo `?aba=`), busca por cliente ou serviço
-  (`search_query` com join), badge por status, drawer de detalhes por HTMX e ações Confirmar/Cancelar.
+  (`search_query` com join), badge por status, página de detalhes e ações Confirmar/Cancelar.
   **Confirmar na mão grava `logger.warning`** — fora do webhook do Mercado Pago não existe "pago",
   e é esse log que separa venda paga de cortesia.
 - **Horários** (`/admin/horarios`): semana recorrente com liga/desliga por dia (`Disponibilidade.ativo`
@@ -140,6 +140,10 @@ Tudo dentro do SQLAdmin, via template sobrescrito e `BaseView` — ver a emenda 
   apaga o que foi enviado.
 - **Serviço**: `duracao_min` continua int em minutos; o form oferece 00:30/01:00/01:30/02:00 e o
   `scaffold_form` acrescenta a duração legada, se houver, para não regravar 45 min como 30.
+- **O painel não usa nenhum script de CDN externa.** Upload de foto é formulário + redirect, e a
+  galeria é renderizada no servidor (o ambiente Jinja do SQLAdmin é async, então `fotos_do_item` é
+  global do Jinja). Uma tentativa anterior com htmx do unpkg deixava a galeria presa em
+  "Carregando fotos…" — não repita o padrão aqui.
 - Rotas de escrita do admin **não** entram em `ROTAS_DE_ESCRITA_CONHECIDAS` (o guardrail varre os
   routers do app, e o SQLAdmin é um sub-app montado). Elas ficam atrás do `AdminAuth`, e o cookie de
   sessão é `same_site="lax"` — POST cross-site não leva cookie.

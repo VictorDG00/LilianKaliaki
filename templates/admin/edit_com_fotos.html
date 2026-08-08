@@ -1,5 +1,8 @@
-{# Form de edicao padrao do SQLAdmin + bloco de fotos. Serve para Servico e
-   Produto: o dono sai do identity do proprio ModelView. #}
+{# Form de edicao padrao do SQLAdmin + galeria de fotos. Serve para Servico e
+   Produto: o dono sai do identity do proprio ModelView.
+
+   A galeria e renderizada aqui mesmo, no servidor — nada de JS nem de CDN
+   externa: upload e formulario com redirect, igual ao resto do painel. #}
 {% extends "sqladmin/edit.html" %}
 
 {% block edit_form %}
@@ -7,15 +10,43 @@
 
 <hr class="my-4">
 <h3 class="card-title mb-3">Fotos</h3>
-{# hx-trigger=load: a galeria chega depois, para o form principal nao esperar #}
-<div hx-get="/admin/fotos/{{ model_view.identity }}/{{ obj.id }}"
-     hx-trigger="load"
-     hx-swap="outerHTML">
-  <p class="text-secondary">Carregando fotos…</p>
-</div>
-{% endblock %}
 
-{% block tail_js %}
-{{ super() }}
-<script src="https://unpkg.com/htmx.org@2.0.3"></script>
+{% if request.query_params.get("erro_foto") %}
+<div class="alert alert-danger py-2">{{ request.query_params.get("erro_foto") }}</div>
+{% endif %}
+
+{% set fotos = fotos_do_item(model_view.identity, obj.id) %}
+
+<div class="row g-2 mb-3">
+  {% for foto in fotos %}
+  <div class="col-6 col-md-3">
+    <div class="card">
+      <img src="/media/{{ foto.arquivo }}" class="card-img-top" alt=""
+           style="aspect-ratio: 1; object-fit: cover;">
+      <div class="card-body p-2 text-center">
+        <form method="POST"
+              action="/admin/fotos/{{ model_view.identity }}/{{ obj.id }}/remover/{{ foto.id }}">
+          <button type="submit" class="btn btn-sm btn-outline-danger w-100">Remover</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <p class="text-secondary">Nenhuma foto ainda.</p>
+  {% endfor %}
+</div>
+
+{% if fotos | length < MAX_FOTOS %}
+<form method="POST" action="/admin/fotos/{{ model_view.identity }}/{{ obj.id }}/upload"
+      enctype="multipart/form-data" class="d-flex gap-2 align-items-center">
+  <input type="file" name="foto" accept="image/png,image/jpeg,image/webp" class="form-control" required>
+  <button type="submit" class="btn btn-primary">Enviar foto</button>
+</form>
+<small class="text-secondary">
+  Até {{ MAX_FOTOS }} fotos ({{ fotos | length }} enviadas). PNG ou JPG, até 8 MB —
+  convertidas para WebP automaticamente.
+</small>
+{% else %}
+<small class="text-secondary">Limite de {{ MAX_FOTOS }} fotos. Remova uma para enviar outra.</small>
+{% endif %}
 {% endblock %}

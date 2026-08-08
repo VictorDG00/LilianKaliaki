@@ -1,4 +1,18 @@
-{# Conteudo do drawer. So leitura — quem muda status sao as acoes do card. #}
+{# Detalhes da reserva. So leitura: quem muda status sao as acoes da listagem.
+   Pagina inteira, e nao painel lateral por JS — o painel inteiro funciona sem
+   nenhum script de CDN externa. #}
+{% extends "sqladmin/layout.html" %}
+
+{% block content %}
+<div class="col-12">
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Detalhes da reserva</h3>
+      <div class="ms-auto">
+        <a class="btn" href="/admin/reserva/list">← voltar para as reservas</a>
+      </div>
+    </div>
+    <div class="card-body">
 <dl>
   <dt>Quando</dt>
   <dd>
@@ -35,3 +49,7 @@
   <dt>Expira em</dt>
   <dd>{{ reserva.expira_em.strftime('%d/%m/%Y %H:%M') if reserva.expira_em else "—" }} (UTC)</dd>
 </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}
