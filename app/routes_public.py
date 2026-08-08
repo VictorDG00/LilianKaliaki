@@ -14,7 +14,9 @@ from app.config import settings
 from app.database import get_session
 from app.precos import preco_da_referencia
 from app.security import obter_csrf_token, verificar_csrf
+from app.agenda import ausencia_na_data, horarios_livres
 from app.models import (
+    RESERVA_ATIVA,
     Contato,
     Disponibilidade,
     Pedido,
@@ -34,8 +36,6 @@ templates = Jinja2Templates(
     context_processors=[lambda request: {"csrf_token": obter_csrf_token(request)}],
 )
 logger = logging.getLogger(__name__)
-
-RESERVA_ATIVA = (StatusReserva.PENDENTE, StatusReserva.CONFIRMADA)
 
 POSTS_NA_HOME = 3
 
@@ -118,45 +118,14 @@ async def agendar_passo_horarios(
         )
 
     data = date.fromisoformat(data_str)
-    weekday = data.weekday()
-    disponibilidades = (
-        await session.exec(select(Disponibilidade).where(Disponibilidade.dia_semana == weekday))
-    ).all()
-
-    duracao = timedelta(minutes=servico.duracao_min)
-    candidatos = []
-    for disp in disponibilidades:
-        slot = datetime.combine(data, disp.hora_inicio)
-        fim = datetime.combine(data, disp.hora_fim)
-        while slot + duracao <= fim:
-            candidatos.append(slot)
-            slot += duracao
-
-    dia_inicio = datetime.combine(data, datetime.min.time())
-    dia_fim = dia_inicio + timedelta(days=1)
-    ocupados = set(
-        (
-            await session.exec(
-                select(Reserva.data_hora).where(
-                    Reserva.servico_id == servico_id,
-                    Reserva.status.in_(RESERVA_ATIVA),
-                    Reserva.data_hora >= dia_inicio,
-                    Reserva.data_hora < dia_fim,
-                )
-            )
-        ).all()
-    )
-
-    # Os candidatos vem de Disponibilidade (hora de parede do negocio), entao a
-    # comparacao tem que ser com a hora local — datetime.utcnow() escondia os
-    # horarios das proximas 3h (offset do fuso) no mesmo dia.
-    agora = datetime.now()
-    slots = [s for s in candidatos if s not in ocupados and s >= agora]
+    # A hierarquia inteira (ausencia -> dia ativo -> vagos) mora em app/agenda.py
+    ausencia = await ausencia_na_data(session, data)
+    slots = [] if ausencia else await horarios_livres(session, servico, data)
 
     return templates.TemplateResponse(
         request,
         "partials/horarios_list.html",
-        {"servico": servico, "data_str": data_str, "slots": slots},
+        {"servico": servico, "data_str": data_str, "slots": slots, "ausencia": ausencia},
     )
 
 

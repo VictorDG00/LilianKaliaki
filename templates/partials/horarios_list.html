@@ -28,6 +28,10 @@
   </button>
   {% endfor %}
 </div>
+{% elif ausencia %}
+<p class="vazio">
+  Não atendemos nesse dia{% if ausencia.motivo %} — {{ ausencia.motivo }}{% endif %}.
+</p>
 {% else %}
 <p class="vazio">Nenhum horário disponível nessa data.</p>
 {% endif %}

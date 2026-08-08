@@ -6,15 +6,17 @@ from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from wtforms import SelectField
 
-from datetime import datetime
+from datetime import date, datetime, time
 
 from sqlalchemy import select
 
+from app.agenda import DIAS_DA_SEMANA, erro_nos_intervalos
 from app.config import settings
 from app.database import SessionLocal
 from app.fotos import FotoInvalida, apagar_pasta, remover_arquivo, salvar_foto
 from app.models import (
     MAX_FOTOS,
+    Ausencia,
     Contato,
     Disponibilidade,
     Foto,
@@ -81,9 +83,6 @@ class ServicoAdmin(ModelView, model=Servico):
         if extras:
             form.duracao_min.kwargs["choices"] = DURACOES + [(m, hhmm(m)) for m in extras]
         return form
-
-class DisponibilidadeAdmin(ModelView, model=Disponibilidade):
-    column_list = [Disponibilidade.dia_semana, Disponibilidade.hora_inicio, Disponibilidade.hora_fim]
 
 class ContatoAdmin(ModelView, model=Contato):
     column_list = [Contato.nome, Contato.email, Contato.telefone, Contato.consentimento_marketing, Contato.criado_em]
@@ -197,6 +196,122 @@ class FotosView(BaseView):
         return await self._galeria(request)
 
 
+class DisponibilidadeView(BaseView):
+    """Horários de atendimento: semana recorrente + períodos de ausência.
+
+    Substitui a tabela crua de Disponibilidade — editar linha a linha um horário
+    semanal era o pior jeito possível de fazer isso.
+    """
+
+    name = "Horários"
+    identity = "horarios"
+    icon = "fa-solid fa-calendar-days"
+
+    async def _tela(self, request: Request, erro: str | None = None):
+        async with SessionLocal() as s:
+            intervalos = (
+                await s.execute(
+                    select(Disponibilidade).order_by(
+                        Disponibilidade.dia_semana, Disponibilidade.hora_inicio
+                    )
+                )
+            ).scalars().all()
+            ausencias = (
+                await s.execute(select(Ausencia).order_by(Ausencia.data_inicio))
+            ).scalars().all()
+
+        por_dia = {numero: [] for numero, _ in DIAS_DA_SEMANA}
+        ativo = {numero: False for numero, _ in DIAS_DA_SEMANA}
+        for intervalo in intervalos:
+            por_dia[intervalo.dia_semana].append(intervalo)
+            ativo[intervalo.dia_semana] = ativo[intervalo.dia_semana] or intervalo.ativo
+
+        return await self.templates.TemplateResponse(
+            request,
+            "admin/horarios.html",
+            {
+                "dias": DIAS_DA_SEMANA,
+                "por_dia": por_dia,
+                "ativo": ativo,
+                "ausencias": ausencias,
+                "hoje": date.today().isoformat(),
+                "erro": erro,
+            },
+        )
+
+    @expose("/horarios", methods=["GET"], identity="horarios")
+    async def tela(self, request: Request):
+        return await self._tela(request)
+
+    @expose("/horarios/semana", methods=["POST"], identity="horarios_semana")
+    async def salvar_semana(self, request: Request):
+        """Recebe a semana inteira e reescreve as linhas.
+
+        Idempotente de proposito: acertar um diff incremental de intervalo
+        custaria mais codigo do que apagar e regravar sete dias.
+        """
+        form = await request.form()
+        novos: dict[int, tuple[bool, list[tuple[time, time]]]] = {}
+
+        for numero, nome in DIAS_DA_SEMANA:
+            inicios = form.getlist(f"dia_{numero}_inicio")
+            fins = form.getlist(f"dia_{numero}_fim")
+            intervalos = [
+                (time.fromisoformat(i), time.fromisoformat(f))
+                for i, f in zip(inicios, fins)
+                if i and f
+            ]
+            erro = erro_nos_intervalos(intervalos)
+            if erro:
+                return await self._tela(request, f"{nome}: {erro}")
+            novos[numero] = (form.get(f"dia_{numero}_ativo") is not None, intervalos)
+
+        async with SessionLocal() as s:
+            for intervalo in (await s.execute(select(Disponibilidade))).scalars().all():
+                await s.delete(intervalo)
+            await s.flush()
+            for numero, (dia_ativo, intervalos) in novos.items():
+                for inicio, fim in intervalos:
+                    s.add(
+                        Disponibilidade(
+                            dia_semana=numero, hora_inicio=inicio, hora_fim=fim, ativo=dia_ativo
+                        )
+                    )
+            await s.commit()
+        return await self._tela(request)
+
+    @expose("/horarios/ausencia", methods=["POST"], identity="horarios_ausencia")
+    async def criar_ausencia(self, request: Request):
+        form = await request.form()
+        inicio_str, fim_str = form.get("data_inicio"), form.get("data_fim")
+        if not inicio_str:
+            return await self._tela(request, "Escolha a data de início da ausência.")
+        inicio = date.fromisoformat(inicio_str)
+        # Um dia só: fim em branco vira o próprio início.
+        fim = date.fromisoformat(fim_str) if fim_str else inicio
+        if fim < inicio:
+            return await self._tela(request, "A ausência termina antes de começar.")
+
+        motivo = (form.get("motivo") or "").strip() or None
+        async with SessionLocal() as s:
+            s.add(Ausencia(data_inicio=inicio, data_fim=fim, motivo=motivo))
+            await s.commit()
+        return await self._tela(request)
+
+    @expose(
+        "/horarios/ausencia/{ausencia_id}/remover",
+        methods=["POST"],
+        identity="horarios_ausencia_remover",
+    )
+    async def remover_ausencia(self, request: Request):
+        async with SessionLocal() as s:
+            ausencia = await s.get(Ausencia, int(request.path_params["ausencia_id"]))
+            if ausencia is not None:
+                await s.delete(ausencia)
+                await s.commit()
+        return await self._tela(request)
+
+
 class CursosView(BaseView):
     """Placeholder. Vira ModelView quando existir a tabela de curso."""
 
@@ -212,12 +327,12 @@ class CursosView(BaseView):
 def setup_admin(app, engine) -> Admin:
     admin = Admin(app, engine, authentication_backend=AdminAuth(secret_key=settings.SECRET_KEY))
     admin.add_view(ServicoAdmin)
-    admin.add_view(DisponibilidadeAdmin)
     admin.add_view(ContatoAdmin)
     admin.add_view(ReservaAdmin)
     admin.add_view(ProdutoAdmin)
     admin.add_view(PedidoAdmin)
     # ordem do menu lateral: Cursos entra logo depois de Pedidos
+    admin.add_base_view(DisponibilidadeView)
     admin.add_base_view(FotosView)
     admin.add_base_view(CursosView)
     admin.add_view(PostAdmin)

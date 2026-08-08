@@ -1,6 +1,6 @@
 # Modelos SQLModel (Servico, Contato, Reserva, Produto, Pedido)
 
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Optional, List
 from enum import Enum
 from sqlmodel import SQLModel, Field, Relationship
@@ -23,10 +23,32 @@ class Servico(SQLModel, table=True):
     )
 
 class Disponibilidade(SQLModel, table=True):
+    """Um intervalo de atendimento de um dia da semana. Varios por dia.
+
+    `dia_semana` segue o Python: 0 = segunda ... 6 = domingo.
+    """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     dia_semana: int
     hora_inicio: time
     hora_fim: time
+    # Desligar o dia no painel nao apaga os horarios — volta a valer quando
+    # religar, que e o comportamento que o Cal.com tem.
+    ativo: bool = Field(default=True)
+
+
+class Ausencia(SQLModel, table=True):
+    """Periodo em que nao se atende: ferias, feriado, consulta.
+
+    Bloqueia o dia inteiro, do primeiro ao ultimo dia (inclusive) — nao existe
+    ausencia de meio periodo, por decisao de escopo.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    data_inicio: date = Field(index=True)
+    data_fim: date = Field(index=True)
+    motivo: Optional[str] = None
+    criado_em: datetime = Field(default_factory=datetime.utcnow)
 
 class Contato(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -41,6 +63,10 @@ class StatusReserva(str, Enum):
     CONFIRMADA = "Confirmada"
     EXPIRADA = "Expirada"
     CANCELADA = "Cancelada"
+
+# Status que ocupam o horario: pendente segura o slot ate expirar.
+RESERVA_ATIVA = (StatusReserva.PENDENTE, StatusReserva.CONFIRMADA)
+
 
 class Reserva(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

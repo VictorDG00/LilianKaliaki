@@ -1,0 +1,157 @@
+{% extends "sqladmin/layout.html" %}
+
+{% block content %}
+<div class="col-12">
+  {% if erro %}
+  <div class="alert alert-danger">{{ erro }}</div>
+  {% endif %}
+
+  {# ---------- Semana recorrente ---------- #}
+  <div class="card mb-4">
+    <div class="card-header">
+      <h3 class="card-title">Horários da semana</h3>
+    </div>
+    <div class="card-body">
+      <p class="text-secondary">
+        Desligar um dia não apaga os horários — eles voltam a valer quando você religar.
+      </p>
+
+      <form method="POST" action="/admin/horarios/semana">
+        {% for numero, nome in dias %}
+        <div class="row align-items-start border-bottom py-3" data-dia="{{ numero }}">
+          <div class="col-md-3">
+            <label class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="dia_{{ numero }}_ativo"
+                     {% if ativo[numero] %}checked{% endif %}>
+              <span class="form-check-label fw-bold">{{ nome }}</span>
+            </label>
+          </div>
+
+          <div class="col-md-7">
+            <div class="intervalos">
+              {% for intervalo in por_dia[numero] %}
+              <div class="d-flex gap-2 align-items-center mb-2 intervalo">
+                <input type="time" class="form-control" name="dia_{{ numero }}_inicio"
+                       value="{{ intervalo.hora_inicio.strftime('%H:%M') }}" required>
+                <span>até</span>
+                <input type="time" class="form-control" name="dia_{{ numero }}_fim"
+                       value="{{ intervalo.hora_fim.strftime('%H:%M') }}" required>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerIntervalo(this)">×</button>
+              </div>
+              {% else %}
+              <p class="text-secondary mb-2 sem-horario">Sem horário.</p>
+              {% endfor %}
+            </div>
+            <button type="button" class="btn btn-sm" onclick="adicionarIntervalo({{ numero }})">+ intervalo</button>
+            <button type="button" class="btn btn-sm" onclick="copiarParaTodos({{ numero }})">copiar para os outros dias</button>
+          </div>
+        </div>
+        {% endfor %}
+
+        <button type="submit" class="btn btn-primary mt-3">Salvar semana</button>
+      </form>
+    </div>
+  </div>
+
+  {# ---------- Ausências ---------- #}
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Ausências (agenda bloqueada)</h3>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="/admin/horarios/ausencia" class="row g-2 align-items-end mb-4">
+        <div class="col-md-3">
+          <label class="form-label">De</label>
+          <input type="date" class="form-control" name="data_inicio" min="{{ hoje }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Até <span class="text-secondary">(vazio = só um dia)</span></label>
+          <input type="date" class="form-control" name="data_fim" min="{{ hoje }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Motivo <span class="text-secondary">(opcional)</span></label>
+          <input type="text" class="form-control" name="motivo" maxlength="80" placeholder="Férias, feriado…">
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Bloquear</button>
+        </div>
+      </form>
+
+      <table class="table">
+        <thead><tr><th>Período</th><th>Motivo</th><th></th></tr></thead>
+        <tbody>
+          {% for ausencia in ausencias %}
+          <tr>
+            <td>
+              {{ ausencia.data_inicio.strftime('%d/%m/%Y') }}
+              {% if ausencia.data_fim != ausencia.data_inicio %}
+              até {{ ausencia.data_fim.strftime('%d/%m/%Y') }}
+              {% endif %}
+            </td>
+            <td>{{ ausencia.motivo or "—" }}</td>
+            <td class="text-end">
+              <form method="POST" action="/admin/horarios/ausencia/{{ ausencia.id }}/remover">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="text-secondary">Nenhuma ausência cadastrada.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // O servidor revalida tudo (fim > início, sem sobreposição) — isto aqui é só
+  // para não precisar recarregar a página para descobrir.
+  function linhaDeIntervalo(dia, inicio, fim) {
+    const linha = document.createElement('div');
+    linha.className = 'd-flex gap-2 align-items-center mb-2 intervalo';
+    linha.innerHTML =
+      '<input type="time" class="form-control" name="dia_' + dia + '_inicio" value="' + inicio + '" required>' +
+      '<span>até</span>' +
+      '<input type="time" class="form-control" name="dia_' + dia + '_fim" value="' + fim + '" required>' +
+      '<button type="button" class="btn btn-sm btn-outline-danger" onclick="removerIntervalo(this)">×</button>';
+    return linha;
+  }
+
+  function caixa(dia) {
+    return document.querySelector('[data-dia="' + dia + '"] .intervalos');
+  }
+
+  function adicionarIntervalo(dia, inicio, fim) {
+    const alvo = caixa(dia);
+    const vazio = alvo.querySelector('.sem-horario');
+    if (vazio) vazio.remove();
+    alvo.appendChild(linhaDeIntervalo(dia, inicio || '09:00', fim || '18:00'));
+  }
+
+  function removerIntervalo(botao) {
+    botao.closest('.intervalo').remove();
+  }
+
+  function copiarParaTodos(origem) {
+    const intervalos = [...caixa(origem).querySelectorAll('.intervalo')].map((linha) => {
+      const campos = linha.querySelectorAll('input');
+      return [campos[0].value, campos[1].value];
+    });
+    document.querySelectorAll('[data-dia]').forEach((bloco) => {
+      const dia = bloco.dataset.dia;
+      if (dia === String(origem)) return;
+      caixa(dia).innerHTML = '';
+      intervalos.forEach(([inicio, fim]) => adicionarIntervalo(dia, inicio, fim));
+    });
+  }
+
+  // Validação imediata do par início/fim do mesmo intervalo.
+  document.addEventListener('change', (evento) => {
+    if (evento.target.type !== 'time') return;
+    const campos = evento.target.closest('.intervalo').querySelectorAll('input[type=time]');
+    const invalido = campos[0].value && campos[1].value && campos[1].value <= campos[0].value;
+    campos[1].setCustomValidity(invalido ? 'O fim precisa ser depois do início.' : '');
+  });
+</script>
+{% endblock %}
