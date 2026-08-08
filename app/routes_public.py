@@ -12,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.database import get_session
+from app.precos import preco_da_referencia
 from app.security import obter_csrf_token, verificar_csrf
 from app.models import (
     Contato,
@@ -295,14 +296,21 @@ async def comprar(
 
 
 @router.post("/pagar", dependencies=[Depends(verificar_csrf)])
-async def pagar(request: Request):
+async def pagar(request: Request, session: AsyncSession = Depends(get_session)):
     payload = await request.json()
     external_reference = payload.pop("external_reference", None)
     if not external_reference:
         return {"status": "rejected"}
 
+    # O valor e definido AQUI, no servidor. O payload do navegador so escolhe
+    # COMO paga (cartao, parcelas, token do Brick), nunca QUANTO.
+    valor = await preco_da_referencia(session, external_reference)
+    if valor is None:
+        return {"status": "rejected"}
+
     sdk = mercadopago.SDK(settings.MERCADO_PAGO_ACCESS_TOKEN)
     payload["external_reference"] = external_reference
+    payload["transaction_amount"] = float(valor)
     payload_log = {**payload, "token": "***"} if "token" in payload else payload
     logger.info("Enviando pagamento para o MP: %s", payload_log)
     try:

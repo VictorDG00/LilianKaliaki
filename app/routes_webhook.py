@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+import logging
 
 import mercadopago
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,6 +11,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.config import settings
 from app.database import get_session
 from app.models import Pedido, Reserva, StatusPedido, StatusReserva
+from app.precos import preco_da_referencia
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -41,6 +45,19 @@ async def mercadopago_webhook(request: Request, session: AsyncSession = Depends(
     external_reference = pagamento.get("external_reference") or ""
     tipo, _, id_str = external_reference.partition(":")
     if not id_str.isdigit():
+        return {"status": "ignored"}
+
+    # Segunda tranca do valor: /pagar ja manda o preco do banco, mas quem
+    # confirma a venda e esta rota, e ela nao confia no que veio de fora.
+    # Valor diferente do esperado nao confirma nada — fica para olho humano.
+    valor_esperado = await preco_da_referencia(session, external_reference)
+    if valor_esperado is not None and float(pagamento.get("transaction_amount") or 0) != float(
+        valor_esperado
+    ):
+        logger.warning(
+            "Pagamento %s aprovado com valor divergente (%s, esperado %s): %s",
+            data_id, pagamento.get("transaction_amount"), valor_esperado, external_reference,
+        )
         return {"status": "ignored"}
 
     if tipo == "reserva":

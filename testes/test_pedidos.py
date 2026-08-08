@@ -72,7 +72,11 @@ async def test_webhook_confirma_pedido(client, session, monkeypatch):
     await session.commit()
     await session.refresh(pedido)
 
-    _FakeSDK.response = {"status": "approved", "external_reference": f"pedido:{pedido.id}"}
+    _FakeSDK.response = {
+        "status": "approved",
+        "external_reference": f"pedido:{pedido.id}",
+        "transaction_amount": produto.preco,
+    }
     monkeypatch.setattr(routes_webhook.mercadopago, "SDK", _FakeSDK)
 
     ts = str(int(datetime.utcnow().timestamp()))

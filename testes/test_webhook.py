@@ -53,7 +53,11 @@ async def _seed_reserva(session):
 
 async def test_assinatura_valida_confirma_reserva(client, session, monkeypatch):
     reserva = await _seed_reserva(session)
-    _FakeSDK.response = {"status": "approved", "external_reference": f"reserva:{reserva.id}"}
+    _FakeSDK.response = {
+        "status": "approved",
+        "external_reference": f"reserva:{reserva.id}",
+        "transaction_amount": 100.0,
+    }
     monkeypatch.setattr(routes_webhook.mercadopago, "SDK", _FakeSDK)
 
     ts = str(int(datetime.utcnow().timestamp()))
@@ -74,7 +78,11 @@ async def test_assinatura_valida_confirma_reserva(client, session, monkeypatch):
 
 async def test_assinatura_invalida_retorna_401_e_nao_altera_banco(client, session, monkeypatch):
     reserva = await _seed_reserva(session)
-    _FakeSDK.response = {"status": "approved", "external_reference": f"reserva:{reserva.id}"}
+    _FakeSDK.response = {
+        "status": "approved",
+        "external_reference": f"reserva:{reserva.id}",
+        "transaction_amount": 100.0,
+    }
     monkeypatch.setattr(routes_webhook.mercadopago, "SDK", _FakeSDK)
 
     resp = await client.post(
@@ -99,7 +107,11 @@ async def test_assinatura_ausente_retorna_401(client, session, monkeypatch):
 
 async def test_replay_do_mesmo_payment_id_e_idempotente(client, session, monkeypatch):
     reserva = await _seed_reserva(session)
-    _FakeSDK.response = {"status": "approved", "external_reference": f"reserva:{reserva.id}"}
+    _FakeSDK.response = {
+        "status": "approved",
+        "external_reference": f"reserva:{reserva.id}",
+        "transaction_amount": 100.0,
+    }
     monkeypatch.setattr(routes_webhook.mercadopago, "SDK", _FakeSDK)
 
     ts = str(int(datetime.utcnow().timestamp()))
@@ -117,3 +129,29 @@ async def test_replay_do_mesmo_payment_id_e_idempotente(client, session, monkeyp
     await session.refresh(reserva)
     assert reserva.status == StatusReserva.CONFIRMADA
     assert reserva.mp_payment_id == data_id
+
+
+async def test_valor_divergente_nao_confirma_a_reserva(client, session, monkeypatch):
+    """Aprovado por R$ 1 uma reserva de R$ 100: o webhook nao vende por isso."""
+    reserva = await _seed_reserva(session)
+    _FakeSDK.response = {
+        "status": "approved",
+        "external_reference": f"reserva:{reserva.id}",
+        "transaction_amount": 1.0,
+    }
+    monkeypatch.setattr(routes_webhook.mercadopago, "SDK", _FakeSDK)
+
+    ts = str(int(datetime.utcnow().timestamp()))
+    data_id = "654321"
+    resp = await client.post(
+        "/webhook/mercadopago",
+        json={"data": {"id": data_id}},
+        headers={
+            "x-signature": _signature(data_id, "req-9", ts, settings.MERCADO_PAGO_WEBHOOK_SECRET),
+            "x-request-id": "req-9",
+        },
+    )
+
+    assert resp.json() == {"status": "ignored"}
+    await session.refresh(reserva)
+    assert reserva.status == StatusReserva.PENDENTE
