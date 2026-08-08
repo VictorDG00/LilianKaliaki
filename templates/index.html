@@ -13,6 +13,9 @@
   <div class="grid">
     {% for servico in servicos %}
     <div class="card">
+      {% if servico.fotos %}
+      <img class="card-foto" src="/media/{{ servico.fotos[0].arquivo }}" alt="{{ servico.titulo }}" loading="lazy">
+      {% endif %}
       <h3>{{ servico.titulo }}</h3>
       <p class="descricao">{{ servico.descricao }}</p>
       <p class="preco">R$ {{ "%.2f"|format(servico.preco) }} <span class="duracao">· {{ servico.duracao_min }} min</span></p>
@@ -40,6 +43,9 @@
   <div class="grid">
     {% for produto in produtos %}
     <div class="card">
+      {% if produto.fotos %}
+      <img class="card-foto" src="/media/{{ produto.fotos[0].arquivo }}" alt="{{ produto.titulo }}" loading="lazy">
+      {% endif %}
       <h3>{{ produto.titulo }}</h3>
       <p class="descricao">{{ produto.descricao }}</p>
       <p class="preco">R$ {{ "%.2f"|format(produto.preco) }}</p>

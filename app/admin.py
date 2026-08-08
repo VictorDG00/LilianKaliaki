@@ -2,6 +2,7 @@
 
 from sqladmin import ModelView, Admin, BaseView, expose
 from sqladmin.authentication import AuthenticationBackend
+from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from wtforms import SelectField
 
@@ -11,7 +12,18 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import Servico, Disponibilidade, Contato, Reserva, Produto, Pedido, Post
+from app.fotos import FotoInvalida, apagar_pasta, remover_arquivo, salvar_foto
+from app.models import (
+    MAX_FOTOS,
+    Contato,
+    Disponibilidade,
+    Foto,
+    Pedido,
+    Post,
+    Produto,
+    Reserva,
+    Servico,
+)
 from app.slug import slug_unico
 
 
@@ -48,6 +60,13 @@ class ServicoAdmin(ModelView, model=Servico):
     column_formatters = {Servico.duracao_min: lambda m, a: hhmm(m.duracao_min)}
     form_overrides = {"duracao_min": SelectField}
     form_args = {"duracao_min": {"choices": DURACOES, "coerce": int, "label": "Tempo do serviço"}}
+    # o bloco de fotos so existe na edicao: antes de salvar nao ha id para
+    # pendurar o arquivo
+    edit_template = "admin/edit_com_fotos.html"
+
+    async def on_model_delete(self, model, request):
+        """Apaga tambem os arquivos — a linha some por cascade, o disco nao."""
+        apagar_pasta("servico", model.id)
 
     async def scaffold_form(self, rules=None):
         """Duracao fora do padrao (cadastrada antes desta tela) entra na lista.
@@ -74,6 +93,11 @@ class ReservaAdmin(ModelView, model=Reserva):
 
 class ProdutoAdmin(ModelView, model=Produto):
     column_list = [Produto.titulo, Produto.preco, Produto.ativo]
+    edit_template = "admin/edit_com_fotos.html"
+
+    async def on_model_delete(self, model, request):
+        """Apaga tambem os arquivos — a linha some por cascade, o disco nao."""
+        apagar_pasta("produto", model.id)
 
 class PedidoAdmin(ModelView, model=Pedido):
     column_list = [Pedido.produto_id, Pedido.contato_id, Pedido.status, Pedido.mp_payment_id, Pedido.criado_em]
@@ -91,6 +115,86 @@ class PostAdmin(ModelView, model=Post):
             data["slug"] = slug_unico(data.get("titulo") or "", usados)
         if data.get("publicado") and not data.get("publicado_em"):
             data["publicado_em"] = datetime.utcnow()
+
+
+class FotosView(BaseView):
+    """Galeria de fotos embutida no form de Servico e de Produto.
+
+    Nao aparece no menu: e um pedaco da tela de edicao, alimentado por HTMX.
+    """
+
+    name = "Fotos"
+    identity = "fotos"
+
+    def is_visible(self, request: Request) -> bool:
+        return False
+
+    @staticmethod
+    def _dono(request: Request) -> tuple[str, int]:
+        dono = request.path_params["dono"]
+        if dono not in ("servico", "produto"):
+            raise HTTPException(status_code=404)
+        return dono, int(request.path_params["item_id"])
+
+    async def _galeria(self, request: Request, erro: str | None = None):
+        dono, item_id = self._dono(request)
+        async with SessionLocal() as s:
+            coluna = Foto.servico_id if dono == "servico" else Foto.produto_id
+            fotos = (
+                await s.execute(select(Foto).where(coluna == item_id).order_by(Foto.ordem))
+            ).scalars().all()
+        return await self.templates.TemplateResponse(
+            request,
+            "admin/fotos.html",
+            {
+                "fotos": fotos,
+                "dono": dono,
+                "item_id": item_id,
+                "max_fotos": MAX_FOTOS,
+                "erro": erro,
+            },
+        )
+
+    @expose("/fotos/{dono}/{item_id}", methods=["GET"], identity="fotos")
+    async def galeria(self, request: Request):
+        return await self._galeria(request)
+
+    @expose("/fotos/{dono}/{item_id}/upload", methods=["POST"], identity="fotos_upload")
+    async def upload(self, request: Request):
+        dono, item_id = self._dono(request)
+        form = await request.form()
+        arquivo = form.get("foto")
+        if arquivo is None or not getattr(arquivo, "filename", ""):
+            return await self._galeria(request, "Escolha um arquivo.")
+
+        async with SessionLocal() as s:
+            coluna = Foto.servico_id if dono == "servico" else Foto.produto_id
+            atuais = (
+                await s.execute(select(Foto).where(coluna == item_id).order_by(Foto.ordem))
+            ).scalars().all()
+            if len(atuais) >= MAX_FOTOS:
+                return await self._galeria(request, f"Máximo de {MAX_FOTOS} fotos.")
+            try:
+                caminho = await salvar_foto(arquivo, f"{dono}/{item_id}")
+            except FotoInvalida as e:
+                return await self._galeria(request, str(e))
+
+            foto = Foto(arquivo=caminho, ordem=len(atuais))
+            setattr(foto, f"{dono}_id", item_id)
+            s.add(foto)
+            await s.commit()
+        return await self._galeria(request)
+
+    @expose("/fotos/{dono}/{item_id}/remover/{foto_id}", methods=["POST"], identity="fotos_remover")
+    async def remover(self, request: Request):
+        dono, item_id = self._dono(request)
+        async with SessionLocal() as s:
+            foto = await s.get(Foto, int(request.path_params["foto_id"]))
+            if foto is not None and getattr(foto, f"{dono}_id") == item_id:
+                remover_arquivo(foto.arquivo)
+                await s.delete(foto)
+                await s.commit()
+        return await self._galeria(request)
 
 
 class CursosView(BaseView):
@@ -114,6 +218,7 @@ def setup_admin(app, engine) -> Admin:
     admin.add_view(ProdutoAdmin)
     admin.add_view(PedidoAdmin)
     # ordem do menu lateral: Cursos entra logo depois de Pedidos
+    admin.add_base_view(FotosView)
     admin.add_base_view(CursosView)
     admin.add_view(PostAdmin)
     return admin

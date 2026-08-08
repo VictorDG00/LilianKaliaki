@@ -1,0 +1,21 @@
+{# Form de edicao padrao do SQLAdmin + bloco de fotos. Serve para Servico e
+   Produto: o dono sai do identity do proprio ModelView. #}
+{% extends "sqladmin/edit.html" %}
+
+{% block edit_form %}
+{{ super() }}
+
+<hr class="my-4">
+<h3 class="card-title mb-3">Fotos</h3>
+{# hx-trigger=load: a galeria chega depois, para o form principal nao esperar #}
+<div hx-get="/admin/fotos/{{ model_view.identity }}/{{ obj.id }}"
+     hx-trigger="load"
+     hx-swap="outerHTML">
+  <p class="text-secondary">Carregando fotos…</p>
+</div>
+{% endblock %}
+
+{% block tail_js %}
+{{ super() }}
+<script src="https://unpkg.com/htmx.org@2.0.3"></script>
+{% endblock %}

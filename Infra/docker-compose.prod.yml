@@ -39,6 +39,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # As fotos de servico/produto vivem fora da imagem: sem este volume, todo
+    # deploy com --build apagaria o que a Lilian subiu.
+    volumes: ["media:/app/media"]
     expose:
       - "8000"
     healthcheck:
@@ -61,3 +64,4 @@ networks:
 
 volumes:
   pgdata:
+  media:

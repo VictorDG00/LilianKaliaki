@@ -21,3 +21,6 @@ htmlcov/
 .vscode/
 .idea/
 .DS_Store
+
+# Uploads (vivem no volume do container, nunca no repo)
+media/

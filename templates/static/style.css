@@ -402,3 +402,13 @@ input[type="tel"] {
   padding-top: 1.5rem;
   border-top: 1px solid var(--border);
 }
+
+/* Foto do card de servico/produto (webp, servida de /media) */
+.card-foto {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  display: block;
+}

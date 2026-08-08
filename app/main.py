@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -39,6 +40,11 @@ app.add_middleware(
 admin = setup_admin(app, engine)
 
 app.mount("/static", StaticFiles(directory="templates/static"), name="static")
+
+# Fotos de servico/produto. Em producao e um volume Docker; em dev, a pasta
+# local — criada aqui para o StaticFiles nao quebrar num clone novo.
+Path("media").mkdir(exist_ok=True)
+app.mount("/media", StaticFiles(directory="media"), name="media")
 
 
 @app.middleware("http")

@@ -12,6 +12,15 @@ class Servico(SQLModel, table=True):
     duracao_min: int
     preco: float
     ativo: bool = Field(default=True)
+    # lazy=selectin e obrigatorio no SQLAlchemy async: sem isso, ler .fotos
+    # fora da sessao estoura MissingGreenlet na listagem do admin.
+    fotos: List["Foto"] = Relationship(
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "order_by": "Foto.ordem",
+            "cascade": "all, delete-orphan",
+        }
+    )
 
 class Disponibilidade(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -50,6 +59,31 @@ class Produto(SQLModel, table=True):
     descricao: Optional[str] = None
     preco: float
     ativo: bool = Field(default=True)
+    fotos: List["Foto"] = Relationship(
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "order_by": "Foto.ordem",
+            "cascade": "all, delete-orphan",
+        }
+    )
+
+
+MAX_FOTOS = 4
+
+
+class Foto(SQLModel, table=True):
+    """Imagem de um servico OU de um produto — uma das duas FKs, nunca as duas.
+
+    Uma tabela para os dois donos em vez de foto1..foto4 em cada um: o limite de
+    MAX_FOTOS e regra de negocio (validada em app/fotos.py), nao de schema.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    servico_id: Optional[int] = Field(default=None, foreign_key="servico.id", index=True)
+    produto_id: Optional[int] = Field(default=None, foreign_key="produto.id", index=True)
+    arquivo: str  # caminho relativo dentro de media/, ja convertido para .webp
+    ordem: int = Field(default=0)
+    criado_em: datetime = Field(default_factory=datetime.utcnow)
 
 
 class StatusPedido(str, Enum):

@@ -8,6 +8,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# ponto de montagem do volume de fotos
+RUN mkdir -p /app/media
+
 EXPOSE 8000
 
 # --proxy-headers/--forwarded-allow-ips: a app fica atras do nginx-proxy
